@@ -6,7 +6,7 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**Milestone 3 of 8: per-turn retrieval pipeline.** Storage, model daemon, and the retrieval pipeline are complete. A `UserPromptSubmit` hook is now installed: on every user turn, the hook embeds the prompt via the daemon, runs vector search + 1-hop graph expansion across the global and per-project scopes, reranks the candidates, and injects the top results back into the conversation. Capture-side hooks and dream loops are not yet implemented.
+**Milestone 4 of 8: capture pipeline.** Storage, model daemon, retrieval pipeline, and capture pipeline are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn, and a `Stop` hook persists every completed turn to `capture_queue` and writes a turn-level embedding for immediate retrievability. Dream loops (consolidation of captures into atomic memories) are not yet implemented.
 
 ## Quick start
 
@@ -34,10 +34,12 @@ daemon at login and keeps it alive. Logs at `~/.claude/debug/memory-daemon.{log,
 
 ### Hooks
 
-`scripts/install-hooks.sh` registers the `UserPromptSubmit` hook in Claude
-Code's settings so retrieval runs automatically on each user turn. Tunables
-(scopes searched, top-k per stage, hop limit, total cap) live in
-`src/hippo/config.py`.
+`scripts/install-hooks.sh` registers the `UserPromptSubmit` and `Stop` hooks
+in Claude Code's settings. The `UserPromptSubmit` hook injects retrieved
+memory on each user turn; the `Stop` hook persists each completed turn to
+`capture_queue` and writes a turn-level embedding so the turn is retrievable
+immediately (until the dream loop atomizes it). Tunables (scopes searched,
+top-k per stage, hop limit, total cap) live in `src/hippo/config.py`.
 
 ## Layout
 
@@ -71,7 +73,8 @@ src/hippo/
     pipeline.py          # orchestrator (embed -> search -> expand -> rerank)
     inject.py            # render results for hook injection
   capture/
-    userprompt_hook.py   # UserPromptSubmit handler
+    userprompt_hook.py   # UserPromptSubmit handler (retrieval injection)
+    stop_hook.py         # Stop handler (capture + turn embedding)
   cli/
     stats.py             # memory-stats
     get.py               # memory-get (fetch a head/body by id)
@@ -82,9 +85,11 @@ bin/
   memory-get             # CLI shim
   memory-search          # CLI shim
   memory-archive         # CLI shim
-  userprompt-retrieve    # hook entrypoint
+  userprompt-retrieve    # UserPromptSubmit hook entrypoint
+  stop-capture           # Stop hook entrypoint
 hooks/
   userprompt-submit.sh   # shell wrapper invoked by Claude Code
+  stop.sh                # shell wrapper invoked by Claude Code
 launchd/
   memory-daemon.plist.template
 scripts/
@@ -97,4 +102,4 @@ tests/                   # mirrors src/ structure
 
 ## Next milestone
 
-Capture pipeline + `Stop` hook + turn embeddings.
+Light dream / `PreCompact` handler — atomize raw turns into per-head memories.
