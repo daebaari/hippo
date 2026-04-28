@@ -47,10 +47,14 @@ def atomize_legacy_files(
     llm: LLMProto, daemon: DaemonProto,
 ) -> int:
     """Run atomize on each legacy .md file. Returns total atoms created."""
+    md_files = [
+        p for p in sorted(legacy_dir.glob("*.md")) if p.name.upper() != "MEMORY.MD"
+    ]
+    total = len(md_files)
     n_atoms = 0
-    for md_path in sorted(legacy_dir.glob("*.md")):
-        if md_path.name.upper() == "MEMORY.MD":
-            continue
+    for idx, md_path in enumerate(md_files, start=1):
+        print(f"[{idx}/{total}] atomizing {md_path.name}...", flush=True)
+        file_atoms = 0
         content = md_path.read_text()
         scope_hint = _scope_hint_from_filename(md_path.name)
 
@@ -70,6 +74,7 @@ def atomize_legacy_files(
         try:
             atoms = json.loads(_strip_fences(raw))
         except json.JSONDecodeError:
+            print(f"[{idx}/{total}] {md_path.name}: {file_atoms} atoms", flush=True)
             continue
 
         for atom in atoms:
@@ -107,6 +112,8 @@ def atomize_legacy_files(
                     )
                     insert_head_embedding(store.conn, head_id, vec)
                 n_atoms += 1
+                file_atoms += 1
             finally:
                 store.conn.close()
+        print(f"[{idx}/{total}] {md_path.name}: {file_atoms} atoms", flush=True)
     return n_atoms
