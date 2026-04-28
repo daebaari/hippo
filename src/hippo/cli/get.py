@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from hippo.config import BODIES_SUBDIR
 from hippo.storage.body_files import read_body_file
 from hippo.storage.heads import get_head
 from hippo.storage.multi_store import Scope, open_store
@@ -23,7 +24,7 @@ def get_body_cli(argv: list[str] | None = None) -> int:
             head = get_head(store.conn, args.head_id)
             if head is None or head.archived:
                 continue
-            body_path = store.memory_dir / "bodies" / f"{head.body_id}.md"
+            body_path = store.memory_dir / BODIES_SUBDIR / f"{head.body_id}.md"
             body = read_body_file(body_path)
             print(f"# {body.title}")
             print(f"scope: {body.scope}  body_id: {body.body_id}")

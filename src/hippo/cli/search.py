@@ -8,7 +8,7 @@ from pathlib import Path
 from hippo.daemon.client import DaemonClient
 from hippo.retrieval.inject import format_memory_block, load_body_preview
 from hippo.retrieval.pipeline import RetrievalPipeline
-from hippo.storage.multi_store import Scope, open_store
+from hippo.storage.multi_store import Scope, resolve_memory_dir
 
 DEFAULTS = dict(
     vector_top_k_per_scope=25,
@@ -30,7 +30,7 @@ def memory_search_cli(argv: list[str] | None = None) -> int:
     pipeline = RetrievalPipeline(daemon=daemon, scopes=scopes, **DEFAULTS)
     result = pipeline.run(args.query)
     # body_resolver: figure out which scope's bodies/ dir to read from
-    scope_to_dir = {scope.as_string(): open_store(scope).memory_dir for scope in scopes}
+    scope_to_dir = {scope.as_string(): resolve_memory_dir(scope) for scope in scopes}
     block = format_memory_block(
         result,
         body_resolver=lambda hit: load_body_preview(scope_to_dir[hit.scope], hit.head.body_id),
