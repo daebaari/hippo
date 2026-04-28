@@ -24,6 +24,7 @@ htmlcov/
 *.db-shm
 bodies/
 .legacy/
+.bootstrap-logs/
 
 # OS
 .DS_Store

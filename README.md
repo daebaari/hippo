@@ -6,7 +6,7 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**Milestone 6 of 8: heavy dream.** Storage, model daemon, retrieval pipeline, capture pipeline, light dream, and the heavy dream are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. The heavy dream — LLM-driven atomization of raw turns into atoms, multi-head expansion, embedding-clustered LLM-judged typed edges, contradiction resolution, and cleanup — runs nightly at 3am on AC power via launchd, or on demand via the `/hippo-dream` slash command. The model is Qwen 2.5 32B Instruct (4-bit MLX, ~18GB resident) loaded once per run and unloaded after.
+**Milestone 7 of 8: bootstrap migration.** Storage, model daemon, retrieval pipeline, capture pipeline, light dream, heavy dream, and the bootstrap migration tool are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. The heavy dream — LLM-driven atomization of raw turns into atoms, multi-head expansion, embedding-clustered LLM-judged typed edges, contradiction resolution, and cleanup — runs nightly at 3am on AC power via launchd, or on demand via the `/hippo-dream` slash command. The model is Qwen 2.5 32B Instruct (4-bit MLX, ~18GB resident) loaded once per run and unloaded after.
 
 ## Quick start
 
@@ -70,6 +70,34 @@ namespaced to coexist with any vanilla `/dream`) runs `bin/dream-heavy
 --force` interactively. The model loads in ~30-60s, then a typical run
 takes a few minutes per scope depending on capture volume.
 
+### Bootstrap migration
+
+`bin/dream-bootstrap` atomizes pre-existing markdown memory files into
+the new Hippo schema as a one-time migration. Each file is fed to the
+atomize prompt with a scope hint derived from its filename prefix; the
+LLM extracts atoms with title/body/heads and chooses `global` vs
+`project:<name>` scope. After atomization, the bootstrap runs the
+normal multi-head expansion, edge proposal, and contradiction
+resolution phases over the bootstrapped corpus, then archives the
+original files to `<memory_dir>/.legacy/<timestamp>/`.
+
+```bash
+bin/dream-bootstrap \
+  --memory-dir ~/.claude/projects/<encoded-project-path>/memory \
+  --project <project-name>
+```
+
+Acquires the `.heavy-lock` on both global and project stores for the
+duration; aborts cleanly if either is held by another process.
+Per-file progress is streamed to stdout. Idempotent: re-running picks
+up any files left in the legacy directory.
+
+> **Runtime note:** propose-edges scales as N² within each cosine
+> cluster. On large corpora a single 22-head cluster expands to 231
+> LLM-judged pairs; the local-LLM bootstrap of a ~30-file kaleon
+> memory took ~110 minutes wall-time. A per-cluster pair cap is the
+> obvious follow-up.
+
 ## Layout
 
 ```
@@ -130,6 +158,7 @@ bin/
   stop-capture           # Stop hook entrypoint
   precompact-light-dream # PreCompact hook entrypoint
   dream-heavy            # heavy dream entrypoint (AC-gated)
+  dream-bootstrap        # one-shot legacy-files-to-atoms migration
 commands/
   dream.md               # /hippo-dream slash command
 hooks/
@@ -150,6 +179,7 @@ tests/                   # mirrors src/ structure
 
 ## Next milestone
 
-Bootstrap migration — seed the heavy-dream pipeline by ingesting
-existing memory files, transcripts, and notes from prior projects so
-the first nightly run has full context to consolidate.
+Install + wiring — top-level `scripts/install.sh` that orchestrates
+deps sync, schema migrations, daemon launchd, dream-heavy launchd,
+hooks, slash commands, and an optional bootstrap step in one shot.
+Plus an end-to-end smoke and a `v0.1.0` tag.
