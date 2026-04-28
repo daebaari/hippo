@@ -24,11 +24,12 @@ class LocalLLM:
 
     def generate(self, prompt: str, *, temperature: float = 0.2, max_tokens: int = 1024) -> str:
         from mlx_lm import generate
+        from mlx_lm.sample_utils import make_sampler
         return generate(
             self.model, self.tokenizer,
             prompt=prompt,
-            temp=temperature,
             max_tokens=max_tokens,
+            sampler=make_sampler(temp=temperature),
             verbose=False,
         )
 
