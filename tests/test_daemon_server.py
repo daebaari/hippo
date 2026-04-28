@@ -7,15 +7,9 @@ on the main thread would starve the loop and requests would hang.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import socket
-import threading
-import time
-from collections.abc import Iterator
 from pathlib import Path
-
-import pytest
 
 from hippo.config import EMBEDDING_DIM
 from hippo.daemon.protocol import (
@@ -23,46 +17,6 @@ from hippo.daemon.protocol import (
     PingRequest,
     RerankRequest,
 )
-from hippo.daemon.server import DaemonServer
-
-
-@pytest.fixture(scope="module")
-def daemon_socket(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
-    """Start the daemon on a background thread; yield socket path; tear down."""
-    sock_path = tmp_path_factory.mktemp("daemon") / "memory.sock"
-    server = DaemonServer.load()
-    loop = asyncio.new_event_loop()
-
-    def run_loop() -> None:
-        asyncio.set_event_loop(loop)
-        loop.run_forever()
-
-    thread = threading.Thread(target=run_loop, daemon=True)
-    thread.start()
-
-    serve_future = asyncio.run_coroutine_threadsafe(server.serve(sock_path), loop)
-
-    # Wait for the listening socket to appear.
-    for _ in range(50):
-        if sock_path.exists():
-            break
-        time.sleep(0.1)
-    else:
-        raise TimeoutError("daemon never started")
-
-    yield sock_path
-
-    async def _shutdown() -> None:
-        serve_future.cancel()
-        try:
-            await asyncio.wrap_future(serve_future)
-        except (asyncio.CancelledError, Exception):
-            pass
-
-    asyncio.run_coroutine_threadsafe(_shutdown(), loop).result(timeout=5)
-    loop.call_soon_threadsafe(loop.stop)
-    thread.join(timeout=5)
-    loop.close()
 
 
 def _send(sock_path: Path, line: str) -> str:
