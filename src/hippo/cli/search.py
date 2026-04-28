@@ -5,16 +5,22 @@ import argparse
 import sys
 from pathlib import Path
 
+from hippo.config import (
+    RETRIEVAL_HOP_LIMIT_PER_SEED,
+    RETRIEVAL_RERANK_TOP_K,
+    RETRIEVAL_TOTAL_CAP,
+    RETRIEVAL_VECTOR_TOP_K_PER_SCOPE,
+)
 from hippo.daemon.client import DaemonClient
 from hippo.retrieval.inject import format_memory_block, load_body_preview
 from hippo.retrieval.pipeline import RetrievalPipeline
 from hippo.storage.multi_store import Scope, resolve_memory_dir
 
 DEFAULTS = dict(
-    vector_top_k_per_scope=25,
-    hop_limit_per_seed=5,
-    total_cap=70,
-    rerank_top_k=12,
+    vector_top_k_per_scope=RETRIEVAL_VECTOR_TOP_K_PER_SCOPE,
+    hop_limit_per_seed=RETRIEVAL_HOP_LIMIT_PER_SEED,
+    total_cap=RETRIEVAL_TOTAL_CAP,
+    rerank_top_k=RETRIEVAL_RERANK_TOP_K,
 )
 
 

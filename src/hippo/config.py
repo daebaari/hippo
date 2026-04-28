@@ -51,3 +51,9 @@ EDGE_BOOST: dict[str, float] = {
 
 # === Lock semantics ===
 STALE_LOCK_AGE_SECONDS = 3600  # 1 hour
+
+# === Retrieval tuning ===
+RETRIEVAL_VECTOR_TOP_K_PER_SCOPE = 25
+RETRIEVAL_HOP_LIMIT_PER_SEED = 5
+RETRIEVAL_TOTAL_CAP = 70
+RETRIEVAL_RERANK_TOP_K = 12
