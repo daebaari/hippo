@@ -1,4 +1,4 @@
-# hippo
+# Hippo
 
 <p align="center">
   <img src="hippoLogo.png" alt="hippo logo" width="400">
