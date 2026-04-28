@@ -32,3 +32,6 @@ bodies/
 # IDE
 .vscode/
 .idea/
+
+# Worktrees
+.worktrees/
