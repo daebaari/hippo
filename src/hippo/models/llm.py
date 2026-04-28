@@ -1,13 +1,29 @@
-"""Local Qwen 2.5 32B Instruct wrapper via mlx-lm.
+"""LLM backends.
 
-Loads once per heavy-dream run, unloaded after. ~18GB resident at 4-bit.
+Two implementations behind the shared `LLMProto` contract:
+
+- ``LocalLLM``: Qwen via mlx-lm. Loads the weights once per heavy-dream run.
+- ``GeminiLLM``: Cloud Gemini via google-genai (optional extra).
+
+``select_llm()`` dispatches on ``hippo.config.Config.backend``.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 LLM_MODEL_ID = "mlx-community/Qwen2.5-32B-Instruct-4bit"
+
+
+class LLMProto(Protocol):
+    def generate_chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        max_tokens: int,
+        thinking_level: str | None = None,
+    ) -> str: ...
 
 
 @dataclass
@@ -39,6 +55,7 @@ class LocalLLM:
         *,
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        thinking_level: str | None = None,  # ignored; LocalLLM has no thinking
     ) -> str:
         prompt = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
