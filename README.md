@@ -6,7 +6,7 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**Milestone 1 of 8: storage layer.** Schema, CRUD modules, sqlite-vec integration, and CLI smoke-test are complete and tested. Models, hooks, daemon, and dream loops are not yet implemented.
+**Milestone 2 of 8: model daemon.** Storage layer and model daemon are complete. The daemon holds the embedder and reranker resident and serves them over a Unix socket via a sync client. Hooks and dream loops are not yet implemented.
 
 ## Quick start
 
@@ -20,6 +20,16 @@ uv run pytest
 # inspect storage state
 uv run memory-stats --project kaleon --json
 ```
+
+### Daemon (optional, for hook integration)
+
+The daemon holds embedder + reranker models resident in memory and exposes them
+over a Unix socket so hooks don't pay the model load cost per invocation.
+
+    scripts/install-daemon.sh
+
+This installs a launchd user agent that starts the daemon at login and keeps
+it alive. Logs at `~/.claude/debug/memory-daemon.{log,err}`.
 
 ## Layout
 
@@ -39,7 +49,20 @@ src/hippo/
     turn_embeddings.py   # turn-level vector store
     dream_runs.py        # audit log
     multi_store.py       # scope resolver, lazy DB creation
+  models/
+    embedder.py          # mxbai-embed-large wrapper
+    reranker.py          # mxbai-rerank-large wrapper
+  daemon/
+    protocol.py          # length-prefixed JSON request/response
+    server.py            # Unix-socket server, model lifecycle
+    client.py            # sync client for hooks
   cli/stats.py           # memory-stats command
+bin/
+  daemon                 # daemon entrypoint
+launchd/
+  memory-daemon.plist.template
+scripts/
+  install-daemon.sh      # installs launchd user agent
 schema/
   001_initial.sql        # initial schema migration
 tests/                   # mirrors src/ structure
@@ -47,4 +70,4 @@ tests/                   # mirrors src/ structure
 
 ## Next milestone
 
-Model daemon (mxbai-embed-large + mxbai-rerank-large via MLX, Unix-socket server).
+Per-turn retrieval pipeline.
