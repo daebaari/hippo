@@ -6,25 +6,31 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**Milestone 7 of 8: bootstrap migration.** Storage, model daemon, retrieval pipeline, capture pipeline, light dream, heavy dream, and the bootstrap migration tool are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. The heavy dream — LLM-driven atomization of raw turns into atoms, multi-head expansion, embedding-clustered LLM-judged typed edges, contradiction resolution, and cleanup — runs nightly at 3am on AC power via launchd, or on demand via the `/hippo-dream` slash command. The model is Qwen 2.5 32B Instruct (4-bit MLX, ~18GB resident) loaded once per run and unloaded after.
+**All milestones complete (v0.1).** Storage, model daemon, retrieval pipeline, capture pipeline, light dream, heavy dream, the bootstrap migration tool, and the one-shot installer are all in. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. The heavy dream — LLM-driven atomization of raw turns into atoms, multi-head expansion, embedding-clustered LLM-judged typed edges, contradiction resolution, and cleanup — runs nightly at 3am on AC power via launchd, or on demand via the `/hippo-dream` slash command. The model is Qwen 2.5 32B Instruct (4-bit MLX, ~18GB resident) loaded once per run and unloaded after.
 
 ## Quick start
 
 ```bash
-# install
-uv sync
+# clone + install everything (deps, daemon, dream-heavy, hooks, slash commands)
+git clone git@github.com:daebaari/hippo.git ~/code/hippo
+cd ~/code/hippo
+scripts/install.sh
 
-# run tests
+# the installer is idempotent and offers an optional bootstrap migration step
+# at the end. Open a new Claude Code session and memory will be live.
+
+# day-to-day:
+uv run memory-stats                       # see body / head / edge counts
+uv run memory-stats --project kaleon      # per-project view
+bin/dream-heavy --force                   # force a heavy dream now
+scripts/uninstall.sh                      # remove hooks + launchd, keep data
+
+# run the test suite:
 uv run pytest
-
-# install daemon (launchd user agent), Claude Code hooks, and nightly dream
-scripts/install-daemon.sh
-scripts/install-hooks.sh
-scripts/install-dream.sh
-
-# inspect storage state
-uv run memory-stats --project kaleon --json
 ```
+
+See `docs/operations.md` for the operations guide (daemon health, manual
+dreams, log locations, backup, stuck locks).
 
 ### Daemon
 
@@ -169,17 +175,15 @@ launchd/
   memory-daemon.plist.template
   dream-heavy.plist.template
 scripts/
+  install.sh             # one-shot installer (orchestrates the rest)
   install-daemon.sh      # installs launchd user agent
   install-hooks.sh       # registers Claude Code hooks + slash commands
   install-dream.sh       # installs nightly dream-heavy launchd agent
+  uninstall.sh           # removes hooks + launchd, preserves memory data
+docs/
+  operations.md          # day-to-day ops: health checks, logs, backup
 schema/
   001_initial.sql        # initial schema migration
 tests/                   # mirrors src/ structure
 ```
 
-## Next milestone
-
-Install + wiring — top-level `scripts/install.sh` that orchestrates
-deps sync, schema migrations, daemon launchd, dream-heavy launchd,
-hooks, slash commands, and an optional bootstrap step in one shot.
-Plus an end-to-end smoke and a `v0.1.0` tag.
