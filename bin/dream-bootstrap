@@ -12,11 +12,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from hippo.config import HEAVY_LOCK_FILENAME
 from hippo.daemon.client import DaemonClient
 from hippo.dream.bootstrap import atomize_legacy_files
 from hippo.dream.contradiction import resolve_contradictions
 from hippo.dream.edge_proposal import propose_edges
 from hippo.dream.multi_head import expand_heads_for_eligible_bodies
+from hippo.lock import LockHeldError, acquire_lock, release_lock
 from hippo.models.llm import LocalLLM
 from hippo.storage.multi_store import Scope, open_store
 
@@ -38,16 +40,47 @@ def main() -> int:
         return 1
 
     daemon = DaemonClient(socket_path=Path.home() / ".claude" / "memory-daemon.sock")
-    llm = LocalLLM.load()
 
-    # Atomize files
-    n = atomize_legacy_files(legacy_dir=legacy_dir, project=args.project, llm=llm, daemon=daemon)
-    print(f"Atomized {n} bodies from {legacy_dir}")
+    # Open both stores and acquire heavy-dream locks before any LLM/atomize work.
+    g_scope = Scope.global_()
+    p_scope = Scope.project(args.project)
+    g_store = open_store(g_scope)
+    p_store = open_store(p_scope)
 
-    # Run consolidation phases on the bootstrapped corpus
-    for scope in [Scope.global_(), Scope.project(args.project)]:
-        store = open_store(scope)
-        try:
+    try:
+        g_handle = acquire_lock(g_store.memory_dir / HEAVY_LOCK_FILENAME)
+    except LockHeldError:
+        print(
+            f"ABORT: {g_scope.as_string()} heavy-lock held by another process",
+            file=sys.stderr,
+        )
+        g_store.conn.close()
+        p_store.conn.close()
+        return 1
+
+    try:
+        p_handle = acquire_lock(p_store.memory_dir / HEAVY_LOCK_FILENAME)
+    except LockHeldError:
+        print(
+            f"ABORT: {p_scope.as_string()} heavy-lock held by another process",
+            file=sys.stderr,
+        )
+        release_lock(g_handle)
+        g_store.conn.close()
+        p_store.conn.close()
+        return 1
+
+    try:
+        llm = LocalLLM.load()
+
+        # Atomize files
+        n = atomize_legacy_files(
+            legacy_dir=legacy_dir, project=args.project, llm=llm, daemon=daemon
+        )
+        print(f"Atomized {n} bodies from {legacy_dir}")
+
+        # Run consolidation phases on the bootstrapped corpus, reusing already-opened stores.
+        for scope, store in [(g_scope, g_store), (p_scope, p_store)]:
             heads_added = expand_heads_for_eligible_bodies(store=store, llm=llm, daemon=daemon)
             edges_added = propose_edges(store=store, llm=llm)
             contradictions = resolve_contradictions(store=store, llm=llm)
@@ -55,10 +88,13 @@ def main() -> int:
                 f"{scope.as_string()}: +{heads_added} heads, +{edges_added} edges, "
                 f"{contradictions} contradictions resolved"
             )
-        finally:
-            store.conn.close()
+    finally:
+        release_lock(g_handle)
+        release_lock(p_handle)
+        g_store.conn.close()
+        p_store.conn.close()
 
-    # Archive legacy files
+    # Archive legacy files (no SQLite writes, safe outside lock).
     if not args.no_archive:
         ts = time.strftime("%Y%m%d-%H%M%S")
         archive_dir = legacy_dir / ".legacy" / ts
