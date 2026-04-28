@@ -44,3 +44,17 @@ jq --arg cmd "$HOME/.claude/hooks/hippo-stop.sh" '
 mv /tmp/settings.json.new "$SETTINGS"
 
 echo "Installed Stop hook → $HOME/.claude/hooks/hippo-stop.sh"
+
+ln -sf "$REPO/hooks/precompact.sh" "$HOME/.claude/hooks/hippo-precompact.sh"
+
+# Add PreCompact hook entry via jq (idempotent: removes old hippo entry first)
+jq --arg cmd "$HOME/.claude/hooks/hippo-precompact.sh" '
+  .hooks.PreCompact |= (
+    (. // [])
+    | map(select((.hooks // []) | map(.command) | index($cmd) | not))
+    | . + [{"hooks": [{"type": "command", "command": $cmd}]}]
+  )
+' "$SETTINGS" > /tmp/settings.json.new
+mv /tmp/settings.json.new "$SETTINGS"
+
+echo "Installed PreCompact hook → $HOME/.claude/hooks/hippo-precompact.sh"
