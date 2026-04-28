@@ -137,3 +137,21 @@ def write_config(c: Config) -> None:
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(body)
     _os.replace(tmp, p)
+
+
+def load_api_key() -> str | None:
+    for env_name in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        v = _os.environ.get(env_name)
+        if v:
+            return v
+    p = secrets_path()
+    if not p.exists():
+        return None
+    for raw_line in p.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, _, val = line.partition("=")
+        if key.strip() in ("GOOGLE_API_KEY", "GEMINI_API_KEY") and val.strip():
+            return val.strip()
+    return None
