@@ -7,11 +7,19 @@
     <array>
         <string>/usr/bin/caffeinate</string>
         <string>-i</string>
-        <string>HIPPO_REPO/bin/dream-heavy</string>
+        <string>HIPPO_UV</string>
+        <string>run</string>
+        <string>--directory</string>
+        <string>HIPPO_REPO</string>
+        <string>--quiet</string>
+        <string>python</string>
+        <string>-m</string>
+        <string>hippo.cli.dream_heavy</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>PATH</key>
+        <string>HIPPO_UV_DIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
     <key>StartCalendarInterval</key>
     <dict>
