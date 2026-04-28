@@ -6,7 +6,7 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**Milestone 5 of 8: light dream.** Storage, model daemon, retrieval pipeline, capture pipeline, and the light dream are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. Heavy dream (LLM-driven atomization of raw turns into atomic memories) is the next milestone.
+**Milestone 6 of 8: heavy dream.** Storage, model daemon, retrieval pipeline, capture pipeline, light dream, and the heavy dream are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. The heavy dream — LLM-driven atomization of raw turns into atoms, multi-head expansion, embedding-clustered LLM-judged typed edges, contradiction resolution, and cleanup — runs nightly at 3am on AC power via launchd, or on demand via the `/hippo-dream` slash command. The model is Qwen 2.5 32B Instruct (4-bit MLX, ~18GB resident) loaded once per run and unloaded after.
 
 ## Quick start
 
@@ -17,9 +17,10 @@ uv sync
 # run tests
 uv run pytest
 
-# install daemon (launchd user agent) and Claude Code hooks
+# install daemon (launchd user agent), Claude Code hooks, and nightly dream
 scripts/install-daemon.sh
 scripts/install-hooks.sh
+scripts/install-dream.sh
 
 # inspect storage state
 uv run memory-stats --project kaleon --json
@@ -46,7 +47,28 @@ queue, so session-level metadata is preserved before context is dropped.
 The PreCompact hook coexists with any other PreCompact hook the user has
 registered (e.g. a vanilla Claude Code dream); the install script only
 manages its own entry. Tunables (scopes searched, top-k per stage, hop
-limit, total cap) live in `src/hippo/config.py`.
+limit, total cap, cluster cosine threshold) live in `src/hippo/config.py`.
+
+### Heavy dream
+
+The heavy dream is the LLM-driven consolidation pass. Per scope it:
+
+1. atomizes each unprocessed session's transcript into bodies + heads,
+2. expands heads on bodies that are retrieved often but have few search-affordances,
+3. clusters active heads by embedding cosine similarity and asks the LLM to type each within-cluster pair (`causes`, `supersedes`, `contradicts`, `applies_when`, `related`),
+4. resolves `contradicts` edges by asking the LLM to pick the current body and archiving the loser plus its heads,
+5. marks captures processed and deletes their now-redundant turn embeddings.
+
+`scripts/install-dream.sh` registers a launchd agent
+(`com.<user>.dream-heavy`) that fires at 3am via
+`/usr/bin/caffeinate -i bin/dream-heavy`. `bin/dream-heavy` itself does
+an explicit `pmset` AC-power check and exits 0 if on battery (use
+`--force` to override). Logs at `~/.claude/debug/dream-heavy.{log,err}`.
+
+The `/hippo-dream` slash command (installed by `install-hooks.sh`,
+namespaced to coexist with any vanilla `/dream`) runs `bin/dream-heavy
+--force` interactively. The model loads in ~30-60s, then a typical run
+takes a few minutes per scope depending on capture volume.
 
 ## Layout
 
@@ -69,6 +91,7 @@ src/hippo/
   models/
     embedder.py          # mxbai-embed-large wrapper
     reranker.py          # mxbai-rerank-large wrapper
+    llm.py               # Qwen 2.5 32B Instruct (4-bit MLX) wrapper
   daemon/
     protocol.py          # newline-delimited JSON request/response
     server.py            # Unix-socket server, model lifecycle
@@ -85,6 +108,14 @@ src/hippo/
   dream/
     light.py             # PreCompact session-meta generator (no LLM)
     precompact_hook.py   # PreCompact handler (invokes light dream)
+    atomize.py           # transcript -> bodies+heads via LLM
+    multi_head.py        # head expansion for retrieved-often bodies
+    cluster.py           # cosine-threshold single-link head clustering
+    edge_proposal.py     # within-cluster LLM-typed edges
+    contradiction.py     # LLM-confirmed contradiction resolution
+    cleanup.py           # mark captures processed + drop turn embeddings
+    heavy.py             # heavy dream orchestrator
+    prompts/             # markdown templates for each LLM-driven phase
   cli/
     stats.py             # memory-stats
     get.py               # memory-get (fetch a head/body by id)
@@ -98,15 +129,20 @@ bin/
   userprompt-retrieve    # UserPromptSubmit hook entrypoint
   stop-capture           # Stop hook entrypoint
   precompact-light-dream # PreCompact hook entrypoint
+  dream-heavy            # heavy dream entrypoint (AC-gated)
+commands/
+  dream.md               # /hippo-dream slash command
 hooks/
   userprompt-submit.sh   # shell wrapper invoked by Claude Code
   stop.sh                # shell wrapper invoked by Claude Code
   precompact.sh          # shell wrapper invoked by Claude Code
 launchd/
   memory-daemon.plist.template
+  dream-heavy.plist.template
 scripts/
   install-daemon.sh      # installs launchd user agent
-  install-hooks.sh       # registers Claude Code hooks
+  install-hooks.sh       # registers Claude Code hooks + slash commands
+  install-dream.sh       # installs nightly dream-heavy launchd agent
 schema/
   001_initial.sql        # initial schema migration
 tests/                   # mirrors src/ structure
@@ -114,5 +150,6 @@ tests/                   # mirrors src/ structure
 
 ## Next milestone
 
-Heavy dream — LLM-driven atomization of raw turns into per-head memories,
-with edge inference and contradiction resolution.
+Bootstrap migration — seed the heavy-dream pipeline by ingesting
+existing memory files, transcripts, and notes from prior projects so
+the first nightly run has full context to consolidate.
