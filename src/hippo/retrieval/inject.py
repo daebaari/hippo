@@ -1,8 +1,8 @@
 """Format retrieval results into the <memory> block injected by the hook."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from hippo.config import BODIES_SUBDIR
 from hippo.retrieval.graph_expand import GraphHit
@@ -10,7 +10,7 @@ from hippo.retrieval.pipeline import RetrievalResult
 from hippo.storage.body_files import read_body_file
 
 
-def load_body_preview(memory_dir: Path, body_id: str, *, max_chars: int = 120) -> Optional[str]:
+def load_body_preview(memory_dir: Path, body_id: str, *, max_chars: int = 120) -> str | None:
     path = memory_dir / BODIES_SUBDIR / f"{body_id}.md"
     try:
         body = read_body_file(path)
@@ -23,7 +23,7 @@ def load_body_preview(memory_dir: Path, body_id: str, *, max_chars: int = 120) -
 
 
 def format_memory_block(
-    result: RetrievalResult, *, body_resolver: Callable[[GraphHit], Optional[str]],
+    result: RetrievalResult, *, body_resolver: Callable[[GraphHit], str | None],
 ) -> str:
     if not result.heads:
         return ""

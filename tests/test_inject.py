@@ -1,8 +1,6 @@
 """Tests for context injection format."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from hippo.retrieval.graph_expand import GraphHit
 from hippo.retrieval.inject import format_memory_block, load_body_preview
 from hippo.retrieval.pipeline import RetrievalResult
@@ -19,10 +17,10 @@ def _hit(head_id: str, body_id: str, summary: str, scope: str) -> GraphHit:
 
 
 def test_format_memory_block_dedupes_by_body(tmp_path):
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
     body = BodyFile(
         body_id="b1", title="Kalshi fees", scope="project:kaleon",
-        created=datetime.now(timezone.utc), updated=datetime.now(timezone.utc),
+        created=datetime.now(UTC), updated=datetime.now(UTC),
         content="Fee is 2c at typical prices and grows to ...",
     )
     bodies_dir = tmp_path / "global"
@@ -34,7 +32,10 @@ def test_format_memory_block_dedupes_by_body(tmp_path):
     ]
     result = RetrievalResult(heads=hits, user_message="kalshi fees?")
 
-    block = format_memory_block(result, body_resolver=lambda hit: load_body_preview(bodies_dir, hit.head.body_id, max_chars=80))
+    block = format_memory_block(
+        result,
+        body_resolver=lambda hit: load_body_preview(bodies_dir, hit.head.body_id, max_chars=80),
+    )
     assert "<memory>" in block and "</memory>" in block
     # Both heads listed
     assert "h1" in block and "h2" in block
