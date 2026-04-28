@@ -23,17 +23,17 @@ class DaemonClient:
         try:
             s.connect(str(self.socket_path))
             s.sendall(line.encode())
-            chunks: list[bytes] = []
+            buf = bytearray()
             while True:
                 chunk = s.recv(65536)
                 if not chunk:
                     break
-                chunks.append(chunk)
-                if chunks[-1].endswith(b"\n"):
+                buf.extend(chunk)
+                if b"\n" in buf:
                     break
         finally:
             s.close()
-        result: dict[str, Any] = json.loads(b"".join(chunks).decode())
+        result: dict[str, Any] = json.loads(buf.decode())
         return result
 
     def ping(self) -> bool:

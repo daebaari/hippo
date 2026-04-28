@@ -23,16 +23,16 @@ def _send(sock_path: Path, line: str) -> str:
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(str(sock_path))
     s.sendall(line.encode())
-    chunks: list[bytes] = []
+    buf = bytearray()
     while True:
         chunk = s.recv(65536)
         if not chunk:
             break
-        chunks.append(chunk)
-        if chunks[-1].endswith(b"\n"):
+        buf.extend(chunk)
+        if b"\n" in buf:
             break
     s.close()
-    return b"".join(chunks).decode()
+    return buf.decode()
 
 
 def test_ping(daemon_socket: Path) -> None:
