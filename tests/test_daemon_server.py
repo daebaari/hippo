@@ -52,7 +52,14 @@ def daemon_socket(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
 
     yield sock_path
 
-    serve_future.cancel()
+    async def _shutdown() -> None:
+        serve_future.cancel()
+        try:
+            await asyncio.wrap_future(serve_future)
+        except (asyncio.CancelledError, Exception):
+            pass
+
+    asyncio.run_coroutine_threadsafe(_shutdown(), loop).result(timeout=5)
     loop.call_soon_threadsafe(loop.stop)
     thread.join(timeout=5)
     loop.close()

@@ -40,10 +40,10 @@ class DaemonServer:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         try:
-            line = await reader.readline()
-            if not line:
-                return
             try:
+                line = await reader.readline()
+                if not line:
+                    return
                 req = decode_request(line.decode())
             except (ValueError, KeyError, json.JSONDecodeError) as e:
                 writer.write(encode_response(ErrorResponse(message=str(e))).encode())
@@ -51,16 +51,20 @@ class DaemonServer:
                 return
 
             resp: Response
-            if isinstance(req, PingRequest):
-                resp = PingResponse()
-            elif isinstance(req, EmbedRequest):
-                vecs = self.embedder.embed_batch(req.texts)
-                resp = EmbedResponse(embeddings=vecs)
-            elif isinstance(req, RerankRequest):
-                scores = self.reranker.rerank(req.pairs)
-                resp = RerankResponse(scores=scores)
-            else:
-                resp = ErrorResponse(message=f"unhandled request: {req}")
+            try:
+                if isinstance(req, PingRequest):
+                    resp = PingResponse()
+                elif isinstance(req, EmbedRequest):
+                    vecs = self.embedder.embed_batch(req.texts)
+                    resp = EmbedResponse(embeddings=vecs)
+                elif isinstance(req, RerankRequest):
+                    scores = self.reranker.rerank(req.pairs)
+                    resp = RerankResponse(scores=scores)
+                else:
+                    resp = ErrorResponse(message=f"unhandled request: {req}")
+            # Operational boundary: convert model failures to wire-protocol errors.
+            except Exception as e:
+                resp = ErrorResponse(message=f"{type(e).__name__}: {e}")
 
             writer.write(encode_response(resp).encode())
             await writer.drain()
