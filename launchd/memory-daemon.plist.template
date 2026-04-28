@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>            <string>com.HIPPO_USER.memory-daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/keon/.local/bin/uv</string>
+        <string>run</string>
+        <string>--directory</string>
+        <string>HIPPO_REPO</string>
+        <string>HIPPO_REPO/bin/daemon</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/keon/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>RunAtLoad</key>        <true/>
+    <key>KeepAlive</key>        <true/>
+    <key>StandardOutPath</key>  <string>HIPPO_HOME/.claude/debug/memory-daemon.log</string>
+    <key>StandardErrorPath</key><string>HIPPO_HOME/.claude/debug/memory-daemon.err</string>
+    <key>WorkingDirectory</key> <string>HIPPO_REPO</string>
+</dict>
+</plist>
