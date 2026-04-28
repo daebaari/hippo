@@ -30,3 +30,17 @@ jq --arg cmd "$HOME/.claude/hooks/hippo-userprompt-submit.sh" '
 mv /tmp/settings.json.new "$SETTINGS"
 
 echo "Installed UserPromptSubmit hook → $HOME/.claude/hooks/hippo-userprompt-submit.sh"
+
+ln -sf "$REPO/hooks/stop.sh" "$HOME/.claude/hooks/hippo-stop.sh"
+
+# Add Stop hook entry via jq (idempotent: removes old hippo entry first)
+jq --arg cmd "$HOME/.claude/hooks/hippo-stop.sh" '
+  .hooks.Stop |= (
+    (. // [])
+    | map(select((.hooks // []) | map(.command) | index($cmd) | not))
+    | . + [{"hooks": [{"type": "command", "command": $cmd}]}]
+  )
+' "$SETTINGS" > /tmp/settings.json.new
+mv /tmp/settings.json.new "$SETTINGS"
+
+echo "Installed Stop hook → $HOME/.claude/hooks/hippo-stop.sh"
