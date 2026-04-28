@@ -48,3 +48,45 @@ def test_format_memory_block_empty():
     block = format_memory_block(result, body_resolver=lambda h: None)
     # No empty <memory> noise injected
     assert block == ""
+
+
+def test_format_memory_block_includes_edge_relation_and_scope_tag(tmp_path):
+    hit = GraphHit(
+        head_id="h1", distance=0.2, scope="project:kaleon",
+        head=HeadRecord(head_id="h1", body_id="b1", summary="Fee is 2c"),
+        edge_relation="contradicts",
+    )
+    result = RetrievalResult(heads=[hit], user_message="?")
+    block = format_memory_block(result, body_resolver=lambda h: None)
+    assert "[project:kaleon] h1 — Fee is 2c (contradicts)" in block
+
+
+def test_format_memory_block_omits_edge_relation_for_vector_seeds(tmp_path):
+    hit = GraphHit(
+        head_id="h1", distance=0.0, scope="global",
+        head=HeadRecord(head_id="h1", body_id="b1", summary="just a summary"),
+        edge_relation=None,
+    )
+    result = RetrievalResult(heads=[hit], user_message="?")
+    block = format_memory_block(result, body_resolver=lambda h: None)
+    assert "[global] h1 — just a summary" in block
+    # No trailing parens for vector seeds
+    assert "just a summary (" not in block
+
+
+def test_load_body_preview_truncates_to_max_chars(tmp_path):
+    from datetime import UTC, datetime
+    body = BodyFile(
+        body_id="b1", title="t", scope="global",
+        created=datetime.now(UTC), updated=datetime.now(UTC),
+        content="A" * 200,
+    )
+    write_body_file(tmp_path, body)
+    preview = load_body_preview(tmp_path, "b1", max_chars=50)
+    assert preview is not None
+    assert len(preview) == 50
+    assert preview.endswith("…")
+
+
+def test_load_body_preview_returns_none_for_missing_body(tmp_path):
+    assert load_body_preview(tmp_path, "nonexistent", max_chars=80) is None
