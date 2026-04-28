@@ -6,7 +6,7 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**Milestone 2 of 8: model daemon.** Storage layer and model daemon are complete. The daemon holds the embedder and reranker resident and serves them over a Unix socket via a sync client. Hooks and dream loops are not yet implemented.
+**Milestone 3 of 8: per-turn retrieval pipeline.** Storage, model daemon, and the retrieval pipeline are complete. A `UserPromptSubmit` hook is now installed: on every user turn, the hook embeds the prompt via the daemon, runs vector search + 1-hop graph expansion across the global and per-project scopes, reranks the candidates, and injects the top results back into the conversation. Capture-side hooks and dream loops are not yet implemented.
 
 ## Quick start
 
@@ -17,25 +17,33 @@ uv sync
 # run tests
 uv run pytest
 
+# install daemon (launchd user agent) and Claude Code hooks
+scripts/install-daemon.sh
+scripts/install-hooks.sh
+
 # inspect storage state
 uv run memory-stats --project kaleon --json
 ```
 
-### Daemon (optional, for hook integration)
+### Daemon
 
 The daemon holds embedder + reranker models resident in memory and exposes them
 over a Unix socket so hooks don't pay the model load cost per invocation.
+`scripts/install-daemon.sh` installs a launchd user agent that starts the
+daemon at login and keeps it alive. Logs at `~/.claude/debug/memory-daemon.{log,err}`.
 
-    scripts/install-daemon.sh
+### Hooks
 
-This installs a launchd user agent that starts the daemon at login and keeps
-it alive. Logs at `~/.claude/debug/memory-daemon.{log,err}`.
+`scripts/install-hooks.sh` registers the `UserPromptSubmit` hook in Claude
+Code's settings so retrieval runs automatically on each user turn. Tunables
+(scopes searched, top-k per stage, hop limit, total cap) live in
+`src/hippo/config.py`.
 
 ## Layout
 
 ```
 src/hippo/
-  config.py              # paths, dimensions, edge relations
+  config.py              # paths, dimensions, edge relations, retrieval tunables
   lock.py                # file-based lock with stale recovery
   storage/
     connection.py        # sqlite + sqlite-vec
@@ -56,13 +64,32 @@ src/hippo/
     protocol.py          # newline-delimited JSON request/response
     server.py            # Unix-socket server, model lifecycle
     client.py            # sync client for hooks
-  cli/stats.py           # memory-stats command
+  retrieval/
+    vector_search.py     # dual-DB ANN over head embeddings
+    graph_expand.py      # 1-hop graph expansion via edges
+    rerank.py            # cross-encoder rerank with edge-type boosts
+    pipeline.py          # orchestrator (embed -> search -> expand -> rerank)
+    inject.py            # render results for hook injection
+  capture/
+    userprompt_hook.py   # UserPromptSubmit handler
+  cli/
+    stats.py             # memory-stats
+    get.py               # memory-get (fetch a head/body by id)
+    search.py            # memory-search (ad-hoc retrieval)
+    archive.py           # memory-archive (mark heads archived)
 bin/
   daemon                 # daemon entrypoint
+  memory-get             # CLI shim
+  memory-search          # CLI shim
+  memory-archive         # CLI shim
+  userprompt-retrieve    # hook entrypoint
+hooks/
+  userprompt-submit.sh   # shell wrapper invoked by Claude Code
 launchd/
   memory-daemon.plist.template
 scripts/
   install-daemon.sh      # installs launchd user agent
+  install-hooks.sh       # registers Claude Code hooks
 schema/
   001_initial.sql        # initial schema migration
 tests/                   # mirrors src/ structure
@@ -70,4 +97,4 @@ tests/                   # mirrors src/ structure
 
 ## Next milestone
 
-Per-turn retrieval pipeline.
+Capture pipeline + `Stop` hook + turn embeddings.

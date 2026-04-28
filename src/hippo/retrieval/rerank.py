@@ -26,7 +26,7 @@ def rerank_candidates(
     raw_scores = client.rerank(pairs)
 
     boosted: list[tuple[float, GraphHit]] = []
-    for c, s in zip(candidates, raw_scores):
+    for c, s in zip(candidates, raw_scores, strict=True):
         boost = EDGE_BOOST.get(c.edge_relation, 1.0) if c.edge_relation else 1.0
         boosted.append((s * boost, c))
 

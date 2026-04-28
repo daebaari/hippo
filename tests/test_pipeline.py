@@ -35,7 +35,16 @@ class FakeDaemon:
 def test_pipeline_runs_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
     s = open_store(Scope.global_())
-    insert_body(s.conn, BodyRecord(body_id="b1", file_path="bodies/b1.md", title="t", scope="global", source="manual"))
+    insert_body(
+        s.conn,
+        BodyRecord(
+            body_id="b1",
+            file_path="bodies/b1.md",
+            title="t",
+            scope="global",
+            source="manual",
+        ),
+    )
     for hid, summary in [("h1", "apple"), ("h2", "orange"), ("h3", "banana ")]:
         insert_head(s.conn, HeadRecord(head_id=hid, body_id="b1", summary=summary))
         v = [0.0] * EMBEDDING_DIM

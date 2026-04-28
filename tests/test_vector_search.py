@@ -1,10 +1,6 @@
 """Tests for the dual-DB vector search step."""
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from hippo.config import EMBEDDING_DIM
 from hippo.retrieval.vector_search import vector_search_all_scopes
 from hippo.storage.bodies import BodyRecord, insert_body
