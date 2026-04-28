@@ -53,7 +53,7 @@ src/hippo/
     embedder.py          # mxbai-embed-large wrapper
     reranker.py          # mxbai-rerank-large wrapper
   daemon/
-    protocol.py          # length-prefixed JSON request/response
+    protocol.py          # newline-delimited JSON request/response
     server.py            # Unix-socket server, model lifecycle
     client.py            # sync client for hooks
   cli/stats.py           # memory-stats command
