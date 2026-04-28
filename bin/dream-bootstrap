@@ -110,7 +110,6 @@ def main() -> int:
                 failures.append((md, str(exc)))
             else:
                 moved += 1
-        # Also move MEMORY.md (no longer needed)
         print(f"Moved {moved} legacy files \u2192 {archive_dir}")
         if failures:
             print(f"FAILED to move {len(failures)} files:", file=sys.stderr)
