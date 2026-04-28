@@ -120,7 +120,7 @@ def run_light_dream(
             )
             head_id = uuid4().hex
             head_summary = (
-                f"Session {session_id} ({project or 'global'}, {len(cap_rows)} turns)"
+                f"Session {session_id} ({project or '(none)'}, {len(cap_rows)} turns)"
             )
             insert_head(
                 store.conn,

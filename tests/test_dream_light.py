@@ -5,6 +5,7 @@ from hippo.config import EMBEDDING_DIM
 from hippo.dream.light import run_light_dream
 from hippo.storage.bodies import list_bodies_by_scope
 from hippo.storage.capture import CaptureRecord, enqueue_capture
+from hippo.storage.heads import list_heads_for_body
 from hippo.storage.multi_store import Scope, open_store
 
 
@@ -40,6 +41,16 @@ def test_light_dream_creates_session_meta_atom(tmp_path, monkeypatch):
     ]
     assert len(sess_meta_bodies) == 2  # one per unique session
     assert stats["sessions_summarized"] == 2
+    for body in sess_meta_bodies:
+        body_path = s2.memory_dir / "bodies" / f"{body.body_id}.md"
+        assert body_path.exists(), f"missing body file for {body.body_id}"
+        heads = list_heads_for_body(s2.conn, body.body_id)
+        assert len(heads) >= 1, f"no heads for body {body.body_id}"
+        for head in heads:
+            row = s2.conn.execute(
+                "SELECT 1 FROM head_embeddings WHERE head_id = ?", (head.head_id,)
+            ).fetchone()
+            assert row is not None, f"missing head_embedding for {head.head_id}"
     s2.conn.close()
 
 
