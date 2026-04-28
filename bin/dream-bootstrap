@@ -100,13 +100,23 @@ def main() -> int:
         archive_dir = legacy_dir / ".legacy" / ts
         archive_dir.mkdir(parents=True, exist_ok=True)
         moved = 0
+        failures: list[tuple[Path, str]] = []
         for md in legacy_dir.glob("*.md"):
             if md.parent == archive_dir or ".legacy" in md.parts:
                 continue
-            shutil.move(str(md), str(archive_dir / md.name))
-            moved += 1
+            try:
+                shutil.move(str(md), str(archive_dir / md.name))
+            except OSError as exc:
+                failures.append((md, str(exc)))
+            else:
+                moved += 1
         # Also move MEMORY.md (no longer needed)
         print(f"Moved {moved} legacy files \u2192 {archive_dir}")
+        if failures:
+            print(f"FAILED to move {len(failures)} files:", file=sys.stderr)
+            for path, reason in failures:
+                print(f"  {path}: {reason}", file=sys.stderr)
+            return 1
 
     return 0
 
