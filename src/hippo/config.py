@@ -93,7 +93,7 @@ DEFAULT_GEMINI_MODEL_ID = "gemini-3-flash-preview"
 DEFAULT_GEMINI_THINKING_LEVEL = "high"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Config:
     backend: str = "qwen"
     gemini_model_id: str = DEFAULT_GEMINI_MODEL_ID
