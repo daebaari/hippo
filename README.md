@@ -6,7 +6,7 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**Milestone 4 of 8: capture pipeline.** Storage, model daemon, retrieval pipeline, and capture pipeline are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn, and a `Stop` hook persists every completed turn to `capture_queue` and writes a turn-level embedding for immediate retrievability. Dream loops (consolidation of captures into atomic memories) are not yet implemented.
+**Milestone 5 of 8: light dream.** Storage, model daemon, retrieval pipeline, capture pipeline, and the light dream are complete. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. Heavy dream (LLM-driven atomization of raw turns into atomic memories) is the next milestone.
 
 ## Quick start
 
@@ -34,12 +34,19 @@ daemon at login and keeps it alive. Logs at `~/.claude/debug/memory-daemon.{log,
 
 ### Hooks
 
-`scripts/install-hooks.sh` registers the `UserPromptSubmit` and `Stop` hooks
-in Claude Code's settings. The `UserPromptSubmit` hook injects retrieved
-memory on each user turn; the `Stop` hook persists each completed turn to
-`capture_queue` and writes a turn-level embedding so the turn is retrievable
-immediately (until the dream loop atomizes it). Tunables (scopes searched,
-top-k per stage, hop limit, total cap) live in `src/hippo/config.py`.
+`scripts/install-hooks.sh` registers the `UserPromptSubmit`, `Stop`, and
+`PreCompact` hooks in Claude Code's settings. The `UserPromptSubmit` hook
+injects retrieved memory on each user turn; the `Stop` hook persists each
+completed turn to `capture_queue` and writes a turn-level embedding so the
+turn is retrievable immediately (until the dream loop atomizes it); the
+`PreCompact` hook fires when the conversation is about to be compacted and
+runs the light dream — a fast (<30s), no-LLM pass that creates one
+`session-meta:<session_id>` body + head per unique session in the capture
+queue, so session-level metadata is preserved before context is dropped.
+The PreCompact hook coexists with any other PreCompact hook the user has
+registered (e.g. a vanilla Claude Code dream); the install script only
+manages its own entry. Tunables (scopes searched, top-k per stage, hop
+limit, total cap) live in `src/hippo/config.py`.
 
 ## Layout
 
@@ -75,6 +82,9 @@ src/hippo/
   capture/
     userprompt_hook.py   # UserPromptSubmit handler (retrieval injection)
     stop_hook.py         # Stop handler (capture + turn embedding)
+  dream/
+    light.py             # PreCompact session-meta generator (no LLM)
+    precompact_hook.py   # PreCompact handler (invokes light dream)
   cli/
     stats.py             # memory-stats
     get.py               # memory-get (fetch a head/body by id)
@@ -87,9 +97,11 @@ bin/
   memory-archive         # CLI shim
   userprompt-retrieve    # UserPromptSubmit hook entrypoint
   stop-capture           # Stop hook entrypoint
+  precompact-light-dream # PreCompact hook entrypoint
 hooks/
   userprompt-submit.sh   # shell wrapper invoked by Claude Code
   stop.sh                # shell wrapper invoked by Claude Code
+  precompact.sh          # shell wrapper invoked by Claude Code
 launchd/
   memory-daemon.plist.template
 scripts/
@@ -102,4 +114,5 @@ tests/                   # mirrors src/ structure
 
 ## Next milestone
 
-Light dream / `PreCompact` handler — atomize raw turns into per-head memories.
+Heavy dream — LLM-driven atomization of raw turns into per-head memories,
+with edge inference and contradiction resolution.
