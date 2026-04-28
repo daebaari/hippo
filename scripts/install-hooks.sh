@@ -58,3 +58,8 @@ jq --arg cmd "$HOME/.claude/hooks/hippo-precompact.sh" '
 mv /tmp/settings.json.new "$SETTINGS"
 
 echo "Installed PreCompact hook → $HOME/.claude/hooks/hippo-precompact.sh"
+
+# Symlink /hippo-dream slash command (coexists with any existing /dream)
+mkdir -p "$HOME/.claude/commands"
+ln -sf "$REPO/commands/dream.md" "$HOME/.claude/commands/hippo-dream.md"
+echo "Installed /hippo-dream slash command -> $HOME/.claude/commands/hippo-dream.md"
