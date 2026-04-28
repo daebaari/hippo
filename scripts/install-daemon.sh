@@ -6,6 +6,11 @@ set -euo pipefail
 HIPPO_REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HIPPO_HOME="$HOME"
 HIPPO_USER="$(whoami)"
+HIPPO_UV="$(command -v uv || true)"
+if [[ -z "$HIPPO_UV" || ! -x "$HIPPO_UV" ]]; then
+  echo "error: 'uv' not found on PATH; install uv first (https://docs.astral.sh/uv/)" >&2
+  exit 1
+fi
 PLIST_LABEL="com.${HIPPO_USER}.memory-daemon"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
 TEMPLATE="$HIPPO_REPO/launchd/memory-daemon.plist.template"
@@ -18,6 +23,7 @@ sed \
   -e "s|HIPPO_REPO|$HIPPO_REPO|g" \
   -e "s|HIPPO_HOME|$HIPPO_HOME|g" \
   -e "s|HIPPO_USER|$HIPPO_USER|g" \
+  -e "s|HIPPO_UV|$HIPPO_UV|g" \
   "$TEMPLATE" > "$PLIST_PATH"
 
 # Unload if loaded

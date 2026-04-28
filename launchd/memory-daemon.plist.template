@@ -5,7 +5,7 @@
     <key>Label</key>            <string>com.HIPPO_USER.memory-daemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/keon/.local/bin/uv</string>
+        <string>HIPPO_UV</string>
         <string>run</string>
         <string>--directory</string>
         <string>HIPPO_REPO</string>
