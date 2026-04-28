@@ -155,6 +155,8 @@ src/hippo/
     get.py               # memory-get (fetch a head/body by id)
     search.py            # memory-search (ad-hoc retrieval)
     archive.py           # memory-archive (mark heads archived)
+    dream_heavy.py       # bin/dream-heavy entry point (loads Qwen, runs phases)
+    dream_bootstrap.py   # bin/dream-bootstrap entry point (legacy migration)
 bin/
   daemon                 # daemon entrypoint
   memory-get             # CLI shim
