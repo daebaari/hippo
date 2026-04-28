@@ -14,10 +14,9 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from hippo import config
-from hippo.config import DB_FILENAME, BODIES_SUBDIR
+from hippo.config import BODIES_SUBDIR, DB_FILENAME
 from hippo.storage.connection import open_connection
 from hippo.storage.migrations import run_migrations
 
@@ -25,14 +24,14 @@ from hippo.storage.migrations import run_migrations
 @dataclass(frozen=True)
 class Scope:
     kind: str               # "global" or "project"
-    project_name: Optional[str] = None
+    project_name: str | None = None
 
     @staticmethod
-    def global_() -> "Scope":
+    def global_() -> Scope:
         return Scope(kind="global")
 
     @staticmethod
-    def project(name: str) -> "Scope":
+    def project(name: str) -> Scope:
         return Scope(kind="project", project_name=name)
 
     def as_string(self) -> str:

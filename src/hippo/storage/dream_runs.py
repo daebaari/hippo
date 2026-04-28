@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 DreamType = Literal["light", "heavy"]
 DreamStatus = Literal["running", "completed", "failed"]
@@ -15,13 +15,13 @@ class DreamRunRecord:
     run_id: int
     type: str
     started_at: int
-    completed_at: Optional[int]
+    completed_at: int | None
     status: str
     atoms_created: int
     heads_created: int
     edges_created: int
     contradictions_resolved: int
-    error_message: Optional[str]
+    error_message: str | None
 
 
 def start_run(conn: sqlite3.Connection, dream_type: DreamType) -> int:

@@ -12,7 +12,6 @@ from __future__ import annotations
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -21,10 +20,10 @@ class HeadRecord:
     body_id: str
     summary: str
     archived: bool = False
-    archive_reason: Optional[str] = None
-    last_retrieved_at: Optional[int] = None
+    archive_reason: str | None = None
+    last_retrieved_at: int | None = None
     retrieval_count: int = 0
-    created_at: Optional[int] = None
+    created_at: int | None = None
 
 
 def insert_head(conn: sqlite3.Connection, record: HeadRecord) -> None:
@@ -48,7 +47,7 @@ def insert_head(conn: sqlite3.Connection, record: HeadRecord) -> None:
     conn.commit()
 
 
-def get_head(conn: sqlite3.Connection, head_id: str) -> Optional[HeadRecord]:
+def get_head(conn: sqlite3.Connection, head_id: str) -> HeadRecord | None:
     row = conn.execute("SELECT * FROM heads WHERE head_id = ?", (head_id,)).fetchone()
     if row is None:
         return None

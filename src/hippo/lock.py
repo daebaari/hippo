@@ -15,7 +15,7 @@ from pathlib import Path
 from hippo.config import STALE_LOCK_AGE_SECONDS
 
 
-class LockHeld(Exception):
+class LockHeldError(Exception):
     """Raised when attempting to acquire a lock already held by a live, fresh PID."""
 
 
@@ -49,14 +49,14 @@ def _is_stale(lock_path: Path) -> bool:
 
 
 def acquire_lock(lock_path: Path) -> LockHandle:
-    """Acquire a lock, sweeping stale locks first. Raises LockHeld if a fresh
+    """Acquire a lock, sweeping stale locks first. Raises LockHeldError if a fresh
     live-PID lock blocks us."""
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     if lock_path.exists():
         if _is_stale(lock_path):
             lock_path.unlink(missing_ok=True)
         else:
-            raise LockHeld(f"lock at {lock_path} held by live PID")
+            raise LockHeldError(f"lock at {lock_path} held by live PID")
     pid = os.getpid()
     lock_path.write_text(str(pid))
     return LockHandle(path=lock_path, pid=pid)

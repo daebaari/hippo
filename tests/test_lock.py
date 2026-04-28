@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from hippo.lock import LockHeld, acquire_lock, release_lock, sweep_stale_locks
+from hippo.lock import LockHeldError, acquire_lock, release_lock, sweep_stale_locks
 
 
 def test_acquire_then_release(tmp_path: Path) -> None:
@@ -23,7 +23,7 @@ def test_acquire_when_held_raises(tmp_path: Path) -> None:
     lock_path = tmp_path / ".test-lock"
     handle = acquire_lock(lock_path)
     try:
-        with pytest.raises(LockHeld):
+        with pytest.raises(LockHeldError):
             acquire_lock(lock_path)
     finally:
         release_lock(handle)

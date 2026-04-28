@@ -56,9 +56,36 @@ def test_archive_body_marks_archived_with_reason(conn: sqlite3.Connection) -> No
 
 
 def test_list_bodies_by_scope_excludes_archived(conn: sqlite3.Connection) -> None:
-    insert_body(conn, BodyRecord(body_id="a", file_path="bodies/a.md", title="A", scope="global", source="manual"))
-    insert_body(conn, BodyRecord(body_id="b", file_path="bodies/b.md", title="B", scope="global", source="manual"))
-    insert_body(conn, BodyRecord(body_id="c", file_path="bodies/c.md", title="C", scope="project:kaleon", source="manual"))
+    insert_body(
+        conn,
+        BodyRecord(
+            body_id="a",
+            file_path="bodies/a.md",
+            title="A",
+            scope="global",
+            source="manual",
+        ),
+    )
+    insert_body(
+        conn,
+        BodyRecord(
+            body_id="b",
+            file_path="bodies/b.md",
+            title="B",
+            scope="global",
+            source="manual",
+        ),
+    )
+    insert_body(
+        conn,
+        BodyRecord(
+            body_id="c",
+            file_path="bodies/c.md",
+            title="C",
+            scope="project:kaleon",
+            source="manual",
+        ),
+    )
     archive_body(conn, "b", reason="superseded")
     globals_active = list_bodies_by_scope(conn, "global")
     ids = {r.body_id for r in globals_active}

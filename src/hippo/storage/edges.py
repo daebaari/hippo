@@ -9,7 +9,6 @@ from __future__ import annotations
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 from hippo.config import SYMMETRIC_RELATIONS
 
@@ -20,7 +19,7 @@ class EdgeRecord:
     to_head: str
     relation: str
     weight: float = 1.0
-    created_at: Optional[int] = None
+    created_at: int | None = None
 
 
 def insert_edge(conn: sqlite3.Connection, edge: EdgeRecord) -> None:

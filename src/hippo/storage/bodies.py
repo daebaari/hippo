@@ -9,7 +9,6 @@ from __future__ import annotations
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -20,10 +19,10 @@ class BodyRecord:
     scope: str
     source: str
     archived: bool = False
-    archive_reason: Optional[str] = None
-    archived_in_favor_of: Optional[str] = None
-    created_at: Optional[int] = None
-    updated_at: Optional[int] = None
+    archive_reason: str | None = None
+    archived_in_favor_of: str | None = None
+    created_at: int | None = None
+    updated_at: int | None = None
 
 
 def insert_body(conn: sqlite3.Connection, record: BodyRecord) -> None:
@@ -49,7 +48,7 @@ def insert_body(conn: sqlite3.Connection, record: BodyRecord) -> None:
     conn.commit()
 
 
-def get_body(conn: sqlite3.Connection, body_id: str) -> Optional[BodyRecord]:
+def get_body(conn: sqlite3.Connection, body_id: str) -> BodyRecord | None:
     row = conn.execute("SELECT * FROM bodies WHERE body_id = ?", (body_id,)).fetchone()
     if row is None:
         return None
@@ -61,7 +60,7 @@ def archive_body(
     body_id: str,
     *,
     reason: str,
-    in_favor_of: Optional[str] = None,
+    in_favor_of: str | None = None,
 ) -> None:
     conn.execute(
         "UPDATE bodies SET archived = 1, archive_reason = ?, "

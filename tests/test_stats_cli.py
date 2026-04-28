@@ -1,7 +1,6 @@
 """End-to-end smoke test for the memory-stats CLI."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -20,14 +19,32 @@ def test_collect_stats_returns_counts_per_scope(
     monkeypatch.setattr("hippo.config.PROJECTS_ROOT", tmp_path / "projects")
 
     g = open_store(Scope.global_())
-    insert_body(g.conn, BodyRecord(body_id="b1", file_path="bodies/b1.md", title="t1", scope="global", source="manual"))
+    insert_body(
+        g.conn,
+        BodyRecord(
+            body_id="b1",
+            file_path="bodies/b1.md",
+            title="t1",
+            scope="global",
+            source="manual",
+        ),
+    )
     insert_head(g.conn, HeadRecord(head_id="h1", body_id="b1", summary="x"))
     rid = start_run(g.conn, "heavy")
     complete_run(g.conn, rid, atoms_created=1, heads_created=1)
     g.conn.close()
 
     p = open_store(Scope.project("kaleon"))
-    insert_body(p.conn, BodyRecord(body_id="b2", file_path="bodies/b2.md", title="t2", scope="project:kaleon", source="manual"))
+    insert_body(
+        p.conn,
+        BodyRecord(
+            body_id="b2",
+            file_path="bodies/b2.md",
+            title="t2",
+            scope="project:kaleon",
+            source="manual",
+        ),
+    )
     p.conn.close()
 
     result = collect_stats(scopes=[Scope.global_(), Scope.project("kaleon")])

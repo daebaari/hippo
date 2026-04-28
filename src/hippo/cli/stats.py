@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  bodies (active):  {info['body_count']}")
         print(f"  heads  (active):  {info['head_count']}")
         print(f"  edges:            {info['edge_count']}")
-        print(f"  recent dream runs:")
+        print("  recent dream runs:")
         for r in info["recent_runs"]:
             print(
                 f"    [{r['type']:5}] run #{r['run_id']:>4} status={r['status']:9} "

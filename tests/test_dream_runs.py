@@ -6,7 +6,6 @@ import sqlite3
 import pytest
 
 from hippo.storage.dream_runs import (
-    DreamRunRecord,
     complete_run,
     fail_run,
     get_recent_runs,
@@ -31,7 +30,14 @@ def test_start_returns_run_id_and_running_status(conn: sqlite3.Connection) -> No
 
 def test_complete_run_records_stats(conn: sqlite3.Connection) -> None:
     run_id = start_run(conn, "heavy")
-    complete_run(conn, run_id, atoms_created=3, heads_created=8, edges_created=5, contradictions_resolved=1)
+    complete_run(
+        conn,
+        run_id,
+        atoms_created=3,
+        heads_created=8,
+        edges_created=5,
+        contradictions_resolved=1,
+    )
     runs = get_recent_runs(conn, limit=1)
     r = runs[0]
     assert r.status == "completed"

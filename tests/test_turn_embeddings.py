@@ -22,8 +22,14 @@ def conn(sqlite_conn: sqlite3.Connection) -> sqlite3.Connection:
 
 
 def test_insert_then_search_returns_closest(conn: sqlite3.Connection) -> None:
-    cap_a = enqueue_capture(conn, CaptureRecord(session_id="s", user_message="u", assistant_message="a"))
-    cap_b = enqueue_capture(conn, CaptureRecord(session_id="s", user_message="u", assistant_message="a"))
+    cap_a = enqueue_capture(
+        conn,
+        CaptureRecord(session_id="s", user_message="u", assistant_message="a"),
+    )
+    cap_b = enqueue_capture(
+        conn,
+        CaptureRecord(session_id="s", user_message="u", assistant_message="a"),
+    )
     v_a = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
     v_b = [0.0, 1.0] + [0.0] * (EMBEDDING_DIM - 2)
     insert_turn_embedding(conn, capture_id=cap_a, summary="apples", embedding=v_a)
@@ -35,8 +41,14 @@ def test_insert_then_search_returns_closest(conn: sqlite3.Connection) -> None:
 
 
 def test_delete_turn_embeddings_for_captures(conn: sqlite3.Connection) -> None:
-    cap_a = enqueue_capture(conn, CaptureRecord(session_id="s", user_message="u", assistant_message="a"))
-    cap_b = enqueue_capture(conn, CaptureRecord(session_id="s", user_message="u", assistant_message="a"))
+    cap_a = enqueue_capture(
+        conn,
+        CaptureRecord(session_id="s", user_message="u", assistant_message="a"),
+    )
+    cap_b = enqueue_capture(
+        conn,
+        CaptureRecord(session_id="s", user_message="u", assistant_message="a"),
+    )
     v = [0.5] * EMBEDDING_DIM
     insert_turn_embedding(conn, capture_id=cap_a, summary="x", embedding=v)
     insert_turn_embedding(conn, capture_id=cap_b, summary="y", embedding=v)

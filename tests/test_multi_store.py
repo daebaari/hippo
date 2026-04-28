@@ -24,7 +24,9 @@ def test_resolve_project_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert resolve_memory_dir(Scope.project("kaleon")) == expected
 
 
-def test_open_store_creates_dir_db_and_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_open_store_creates_dir_db_and_schema(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
     store = open_store(Scope.global_())
     # DB file created
@@ -39,7 +41,9 @@ def test_open_store_creates_dir_db_and_schema(tmp_path: Path, monkeypatch: pytes
     store.conn.close()
 
 
-def test_open_store_idempotent_on_existing_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_open_store_idempotent_on_existing_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
     store_a = open_store(Scope.global_())
     store_a.conn.close()

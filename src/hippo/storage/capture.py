@@ -4,20 +4,19 @@ from __future__ import annotations
 import sqlite3
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class CaptureRecord:
     session_id: str
-    user_message: Optional[str] = None
-    assistant_message: Optional[str] = None
-    project: Optional[str] = None
-    transcript_path: Optional[str] = None
-    queue_id: Optional[int] = None
-    created_at: Optional[int] = None
-    processed_at: Optional[int] = None
-    processed_by_run: Optional[int] = None
+    user_message: str | None = None
+    assistant_message: str | None = None
+    project: str | None = None
+    transcript_path: str | None = None
+    queue_id: int | None = None
+    created_at: int | None = None
+    processed_at: int | None = None
+    processed_by_run: int | None = None
 
 
 def enqueue_capture(conn: sqlite3.Connection, record: CaptureRecord) -> int:

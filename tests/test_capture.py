@@ -38,8 +38,12 @@ def test_enqueue_returns_id_and_persists(conn: sqlite3.Connection) -> None:
 
 
 def test_list_unprocessed_excludes_processed(conn: sqlite3.Connection) -> None:
-    a = enqueue_capture(conn, CaptureRecord(session_id="s1", user_message="a", assistant_message="b"))
-    b = enqueue_capture(conn, CaptureRecord(session_id="s1", user_message="c", assistant_message="d"))
+    a = enqueue_capture(
+        conn, CaptureRecord(session_id="s1", user_message="a", assistant_message="b")
+    )
+    b = enqueue_capture(
+        conn, CaptureRecord(session_id="s1", user_message="c", assistant_message="d")
+    )
     mark_captures_processed(conn, [a], run_id=1)
     remaining = list_unprocessed_captures(conn)
     assert {r.queue_id for r in remaining} == {b}
@@ -48,6 +52,13 @@ def test_list_unprocessed_excludes_processed(conn: sqlite3.Connection) -> None:
 def test_unprocessed_ordered_by_created_at(conn: sqlite3.Connection) -> None:
     ids = []
     for i in range(3):
-        ids.append(enqueue_capture(conn, CaptureRecord(session_id=f"s{i}", user_message="u", assistant_message="a")))
+        ids.append(
+            enqueue_capture(
+                conn,
+                CaptureRecord(
+                    session_id=f"s{i}", user_message="u", assistant_message="a"
+                ),
+            )
+        )
     rows = list_unprocessed_captures(conn)
     assert [r.queue_id for r in rows] == ids

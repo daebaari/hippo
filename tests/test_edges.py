@@ -20,7 +20,16 @@ from hippo.storage.migrations import run_migrations
 @pytest.fixture
 def conn(sqlite_conn: sqlite3.Connection) -> sqlite3.Connection:
     run_migrations(sqlite_conn)
-    insert_body(sqlite_conn, BodyRecord(body_id="b1", file_path="bodies/b1.md", title="t", scope="global", source="manual"))
+    insert_body(
+        sqlite_conn,
+        BodyRecord(
+            body_id="b1",
+            file_path="bodies/b1.md",
+            title="t",
+            scope="global",
+            source="manual",
+        ),
+    )
     for hid in ["h1", "h2", "h3"]:
         insert_head(sqlite_conn, HeadRecord(head_id=hid, body_id="b1", summary=hid))
     return sqlite_conn

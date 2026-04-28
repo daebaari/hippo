@@ -8,7 +8,7 @@ layer above this module).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import frontmatter  # type: ignore[import-untyped]
@@ -65,6 +65,6 @@ def read_body_file(path: Path) -> BodyFile:
 def _parse_dt(value: object) -> datetime:
     if isinstance(value, datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
     return datetime.fromisoformat(str(value))
