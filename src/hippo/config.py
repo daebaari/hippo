@@ -5,6 +5,7 @@ Pipeline code must NEVER hardcode values that exist here.
 """
 from __future__ import annotations
 
+import os as _os
 from pathlib import Path
 
 # === Storage paths ===
@@ -63,8 +64,6 @@ CLUSTER_COSINE_THRESHOLD = 0.7  # min cosine similarity to link two heads in the
 
 
 # === LLM backend toggle ===
-import os as _os
-
 HIPPO_CONFIG_FILENAME = "hippo-config.toml"
 HIPPO_SECRETS_FILENAME = "hippo-secrets"
 

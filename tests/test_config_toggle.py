@@ -1,8 +1,6 @@
 """Tests for the toggle-related additions in hippo.config."""
 from __future__ import annotations
 
-import pytest
-
 from hippo import config as cfg
 
 
