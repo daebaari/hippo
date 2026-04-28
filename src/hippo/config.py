@@ -57,3 +57,6 @@ RETRIEVAL_VECTOR_TOP_K_PER_SCOPE = 25
 RETRIEVAL_HOP_LIMIT_PER_SEED = 5
 RETRIEVAL_TOTAL_CAP = 70
 RETRIEVAL_RERANK_TOP_K = 12
+
+# === Dream tuning ===
+CLUSTER_COSINE_THRESHOLD = 0.7  # min cosine similarity to link two heads in the same cluster
