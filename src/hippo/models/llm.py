@@ -9,8 +9,15 @@ Two implementations behind the shared `LLMProto` contract:
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
+
+
+def _sleep(seconds: float) -> None:
+    """Indirection so tests can patch sleep without touching `time`."""
+    time.sleep(seconds)
+
 
 LLM_MODEL_ID = "mlx-community/Qwen2.5-32B-Instruct-4bit"
 
@@ -125,8 +132,42 @@ class GeminiLLM:
         return self._call_with_retry(contents=contents, config=config)
 
     def _call_with_retry(self, *, contents: Any, config: Any) -> str:
-        # Minimal version: single attempt, propagate errors. Task 6 hardens this.
-        resp = self.client.models.generate_content(
-            model=self.model_id, contents=contents, config=config
-        )
-        return resp.text or ""
+        # Try to import APIError class; we'll check for it dynamically
+        api_error_class = None
+        try:
+            from google.genai import errors as genai_errors
+            api_error_class = genai_errors.APIError
+        except ImportError:
+            pass
+
+        try:
+            import httpx as httpx_lib
+            _network_excs: tuple[type[BaseException], ...] = (
+                OSError, TimeoutError, httpx_lib.RequestError,
+            )
+        except ImportError:
+            _network_excs = (OSError, TimeoutError)
+
+        for attempt in range(self.max_attempts):
+            try:
+                resp = self.client.models.generate_content(
+                    model=self.model_id, contents=contents, config=config
+                )
+                return resp.text or ""
+            except BaseException as e:
+                # Check for APIError if google.genai is available
+                if api_error_class is not None and isinstance(e, api_error_class):
+                    code = getattr(e, "code", None)
+                    if code in _RETRYABLE_HTTP and attempt < self.max_attempts - 1:
+                        _sleep(2 ** attempt)
+                        continue
+                    raise
+                # Retry network errors
+                if isinstance(e, _network_excs):
+                    if attempt < self.max_attempts - 1:
+                        _sleep(2 ** attempt)
+                        continue
+                    raise
+                # Non-retryable error, propagate
+                raise
+        raise RuntimeError("unreachable")  # pragma: no cover
