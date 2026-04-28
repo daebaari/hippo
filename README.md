@@ -1,7 +1,8 @@
-<h1>
-  <img src="hippoLogo.png" alt="hippo logo" height="40" align="left">
-  hippo
-</h1>
+# hippo
+
+<p align="center">
+  <img src="hippoLogo.png" alt="hippo logo" width="400">
+</p>
 
 Atomic memory system for Claude Code: per-turn retrieval, multi-head atoms, head-level typed graph edges, two-tier dream consolidation.
 
