@@ -26,7 +26,7 @@ def test_similar_texts_have_higher_cosine(embedder: Embedder) -> None:
     c = embedder.embed("quarterly revenue forecast")
 
     def cos(x: list[float], y: list[float]) -> float:
-        dot = sum(xi * yi for xi, yi in zip(x, y))
+        dot = sum(xi * yi for xi, yi in zip(x, y, strict=True))
         nx = math.sqrt(sum(xi * xi for xi in x))
         ny = math.sqrt(sum(yi * yi for yi in y))
         return dot / (nx * ny)

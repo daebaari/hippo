@@ -18,7 +18,7 @@ class Embedder:
     model: SentenceTransformer
 
     @staticmethod
-    def load() -> "Embedder":
+    def load() -> Embedder:
         model = SentenceTransformer(EMBEDDER_MODEL_ID)
         return Embedder(model=model)
 
