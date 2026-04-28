@@ -23,19 +23,48 @@ weighting so atoms still rank above raw turns. Worth a small dedicated plan.
 
 ## Edge-proposal scales N² within each cosine cluster
 
-**Symptom:** heavy dream wall-time grows quadratically with cluster size.
-A 22-head cluster expands to 231 LLM-judged pairs per run. The kaleon
-bootstrap of ~30 files took ~110 minutes; subsequent dreams over 4 captures
-that join existing big clusters can take 10-30 min.
+**Symptom:** heavy dream wall-time grows quadratically with cluster size and
+gets worse over time. Observed runs on the kaleon project store:
+
+| Run | Captures processed | New atoms | New edges | Wall time |
+|---|---|---|---|---|
+| Bootstrap (~30 files) | 31 files | 55 | 596 | **~110 min** |
+| Heavy dream #1 | 4 captures | 4 | 5 | **~26 min** |
+| Heavy dream #2 (in progress) | 15 captures | 7+ | ~3 in 16 min | **30-50 min projected** |
+
+The dominant cost is the within-cluster LLM judgment loop. A cluster of N
+heads expands to N(N−1)/2 pairs; mxbai-embed-large produces fairly large
+clusters (the kaleon corpus had a 22-head cluster → 231 pairs alone).
+
+The behavior compounds: each successful dream grows existing clusters
+slightly, increasing the next run's pair count. And most pair evaluations
+return `"none"` (the heads weren't actually meaningfully related despite
+being similar enough to cluster) — those calls still cost full LLM time
+without producing edges.
 
 **Root cause:** `src/hippo/dream/edge_proposal.py` calls the LLM on every
-unique pair within each `cluster_active_heads` cluster, no cap.
+unique pair within each `cluster_active_heads` cluster, no cap. The cluster
+algorithm (single-link, cosine ≥ 0.7) is also generous about what counts as
+"in the same cluster."
 
-**Workaround:** none today; runs run as long as they need.
+**Workaround:** none today; runs run as long as they need. Don't trigger
+manual heavy dreams during work hours unless you can spare ~30 min.
 
-**Fix:** add a per-cluster pair cap (e.g., for clusters >K heads, only propose
-edges between the top-K most-central nodes by current degree, or a random
-sample). Probably 30-50 lines + tests.
+**Fix options:**
+
+1. **Per-cluster pair cap.** For clusters > K heads, only propose edges between
+   the K most-central nodes by current degree (or a random sample). 30-50
+   lines + tests. Bounds runtime to roughly K² × cluster_count regardless
+   of corpus growth.
+2. **Skip pairs with low cosine** even within the same cluster. Cluster
+   membership is single-link transitive; two members of the same cluster can
+   be far apart. Add a per-pair similarity gate (e.g., > 0.75) before LLM
+   call. 10-line change, much higher hit rate.
+3. **Cheap pre-classifier**. Before the expensive LLM call, run a fast prompt
+   on a smaller model (or even a string-distance heuristic) to short-circuit
+   "obviously unrelated" pairs. More invasive.
+
+(1) and (2) compose naturally and would together likely cut wall time 5-10×.
 
 ## Atomize-prompt noise leakage
 
