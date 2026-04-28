@@ -60,3 +60,27 @@ RETRIEVAL_RERANK_TOP_K = 12
 
 # === Dream tuning ===
 CLUSTER_COSINE_THRESHOLD = 0.7  # min cosine similarity to link two heads in the same cluster
+
+
+# === LLM backend toggle ===
+import os as _os
+
+HIPPO_CONFIG_FILENAME = "hippo-config.toml"
+HIPPO_SECRETS_FILENAME = "hippo-secrets"
+
+
+class ConfigError(RuntimeError):
+    """Raised for malformed configuration or unrecoverable misconfiguration."""
+
+
+def _config_dir() -> Path:
+    override = _os.environ.get("HIPPO_CONFIG_DIR")
+    return Path(override) if override else CLAUDE_HOME
+
+
+def config_path() -> Path:
+    return _config_dir() / HIPPO_CONFIG_FILENAME
+
+
+def secrets_path() -> Path:
+    return _config_dir() / HIPPO_SECRETS_FILENAME
