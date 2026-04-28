@@ -1,7 +1,7 @@
 """UserPromptSubmit hook handler.
 
-Reads a JSON payload from stdin (Claude Code's hook envelope), runs the
-retrieval pipeline against global + project scopes, and emits a
+Reads JSON envelope (Claude Code's UserPromptSubmit format) from stdin,
+runs the retrieval pipeline against global + project scopes, and emits a
 ``<memory>`` block on stdout that Claude Code injects into the next turn.
 
 The ``main()`` entry point swallows all exceptions and returns 0 — this
@@ -45,7 +45,7 @@ def handle_userprompt_submit(
     *, stdin_text: str, daemon: DaemonClientProto | None = None,
 ) -> str:
     payload = json.loads(stdin_text)
-    user_message = payload.get("user_message", "")
+    user_message = payload.get("prompt", "")
     cwd = payload.get("cwd", os.getcwd())
     if not user_message.strip():
         return ""

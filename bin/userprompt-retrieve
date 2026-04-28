@@ -1,3 +1,10 @@
 #!/usr/bin/env bash
-# Run the userprompt hook under uv so all project deps are available.
-exec uv run --project "$(dirname "$0")/.." --quiet python -m hippo.capture.userprompt_hook "$@"
+# Resolve symlinks so --project points to the real repo, not the symlink dir.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+exec uv run --project "$SCRIPT_DIR/.." --quiet python -m hippo.capture.userprompt_hook "$@"
