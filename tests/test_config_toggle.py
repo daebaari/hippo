@@ -1,6 +1,8 @@
 """Tests for the toggle-related additions in hippo.config."""
 from __future__ import annotations
 
+import pytest
+
 from hippo import config as cfg
 
 
@@ -25,3 +27,42 @@ class TestConfigError:
     def test_config_error_carries_message(self):
         err = cfg.ConfigError("boom")
         assert str(err) == "boom"
+
+
+class TestConfig:
+    def test_load_missing_file_returns_defaults(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        c = cfg.load_config()
+        assert c.backend == "qwen"
+
+    def test_round_trip(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        cfg.write_config(
+            cfg.Config(
+                backend="gemini",
+                gemini_model_id="x",
+                gemini_default_thinking_level="low",
+            )
+        )
+        c = cfg.load_config()
+        assert c.backend == "gemini"
+        assert c.gemini_model_id == "x"
+        assert c.gemini_default_thinking_level == "low"
+
+    def test_load_malformed_toml_raises(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        (tmp_path / "hippo-config.toml").write_text("not valid toml [[[")
+        with pytest.raises(cfg.ConfigError):
+            cfg.load_config()
+
+    def test_load_unknown_backend_raises(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        (tmp_path / "hippo-config.toml").write_text('backend = "pigeon"\n')
+        with pytest.raises(cfg.ConfigError, match="backend must be"):
+            cfg.load_config()
+
+    def test_write_is_atomic(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        cfg.write_config(cfg.Config(backend="gemini"))
+        leftovers = list(tmp_path.glob("*.tmp*"))
+        assert leftovers == []

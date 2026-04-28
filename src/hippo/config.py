@@ -6,6 +6,8 @@ Pipeline code must NEVER hardcode values that exist here.
 from __future__ import annotations
 
 import os as _os
+import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 # === Storage paths ===
@@ -83,3 +85,55 @@ def config_path() -> Path:
 
 def secrets_path() -> Path:
     return _config_dir() / HIPPO_SECRETS_FILENAME
+
+
+_VALID_BACKENDS: frozenset[str] = frozenset({"qwen", "gemini"})
+
+DEFAULT_GEMINI_MODEL_ID = "gemini-3-flash-preview"
+DEFAULT_GEMINI_THINKING_LEVEL = "high"
+
+
+@dataclass(frozen=True)
+class Config:
+    backend: str = "qwen"
+    gemini_model_id: str = DEFAULT_GEMINI_MODEL_ID
+    gemini_default_thinking_level: str = DEFAULT_GEMINI_THINKING_LEVEL
+
+
+def load_config() -> Config:
+    p = config_path()
+    if not p.exists():
+        return Config()
+    try:
+        data = tomllib.loads(p.read_text())
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{p}: {exc}") from exc
+    backend = str(data.get("backend", "qwen"))
+    if backend not in _VALID_BACKENDS:
+        raise ConfigError(
+            f"backend must be 'qwen' or 'gemini', got {backend!r} in {p}"
+        )
+    gemini_data = data.get("gemini")
+    gemini: dict[str, str] = gemini_data if isinstance(gemini_data, dict) else {}
+    return Config(
+        backend=backend,
+        gemini_model_id=str(gemini.get("model_id", DEFAULT_GEMINI_MODEL_ID)),
+        gemini_default_thinking_level=str(
+            gemini.get("default_thinking_level", DEFAULT_GEMINI_THINKING_LEVEL)
+        ),
+    )
+
+
+def write_config(c: Config) -> None:
+    p = config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    body = (
+        f'backend = "{c.backend}"\n'
+        f"\n"
+        f"[gemini]\n"
+        f'model_id = "{c.gemini_model_id}"\n'
+        f'default_thinking_level = "{c.gemini_default_thinking_level}"\n'
+    )
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(body)
+    _os.replace(tmp, p)
