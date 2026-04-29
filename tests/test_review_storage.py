@@ -30,3 +30,69 @@ def test_update_last_reviewed_at_stamps_now(sqlite_conn):
     assert rec is not None
     assert rec.last_reviewed_at is not None
     assert before <= rec.last_reviewed_at <= after
+
+
+def test_find_oldest_unreviewed_active_orders_null_first_then_oldest(sqlite_conn):
+    run_migrations(sqlite_conn)
+    # b-null: never reviewed (NULL)
+    # b-old:  reviewed long ago
+    # b-new:  reviewed recently
+    # b-arch: archived (must be excluded)
+    for bid in ("b-null", "b-old", "b-new", "b-arch"):
+        insert_body(
+            sqlite_conn,
+            BodyRecord(
+                body_id=bid, file_path=f"bodies/{bid}.md",
+                title=bid, scope="global", source="test",
+            ),
+        )
+    sqlite_conn.execute("UPDATE bodies SET last_reviewed_at = 100 WHERE body_id = 'b-old'")
+    sqlite_conn.execute("UPDATE bodies SET last_reviewed_at = 999 WHERE body_id = 'b-new'")
+    sqlite_conn.execute("UPDATE bodies SET archived = 1 WHERE body_id = 'b-arch'")
+    sqlite_conn.commit()
+
+    from hippo.storage.bodies import find_oldest_unreviewed_active
+
+    out = find_oldest_unreviewed_active(sqlite_conn, scope="global", limit=10)
+    ids = [b.body_id for b in out]
+    assert ids == ["b-null", "b-old", "b-new"]
+
+
+def test_find_oldest_unreviewed_active_respects_limit(sqlite_conn):
+    run_migrations(sqlite_conn)
+    for bid in ("b1", "b2", "b3"):
+        insert_body(
+            sqlite_conn,
+            BodyRecord(
+                body_id=bid, file_path=f"bodies/{bid}.md",
+                title=bid, scope="global", source="test",
+            ),
+        )
+
+    from hippo.storage.bodies import find_oldest_unreviewed_active
+
+    out = find_oldest_unreviewed_active(sqlite_conn, scope="global", limit=2)
+    assert len(out) == 2
+
+
+def test_find_oldest_unreviewed_active_filters_by_scope(sqlite_conn):
+    run_migrations(sqlite_conn)
+    insert_body(
+        sqlite_conn,
+        BodyRecord(
+            body_id="g1", file_path="bodies/g1.md", title="g1",
+            scope="global", source="test",
+        ),
+    )
+    insert_body(
+        sqlite_conn,
+        BodyRecord(
+            body_id="p1", file_path="bodies/p1.md", title="p1",
+            scope="project:foo", source="test",
+        ),
+    )
+
+    from hippo.storage.bodies import find_oldest_unreviewed_active
+
+    out = find_oldest_unreviewed_active(sqlite_conn, scope="global", limit=10)
+    assert [b.body_id for b in out] == ["g1"]

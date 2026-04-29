@@ -88,6 +88,23 @@ def update_last_reviewed_at(conn: sqlite3.Connection, body_id: str) -> None:
     conn.commit()
 
 
+def find_oldest_unreviewed_active(
+    conn: sqlite3.Connection, *, scope: str, limit: int
+) -> list[BodyRecord]:
+    """Active bodies in scope, NULL last_reviewed_at first, then oldest first.
+
+    Tie-breaks deterministically by body_id ASC.
+    """
+    rows = conn.execute(
+        "SELECT * FROM bodies "
+        "WHERE archived = 0 AND scope = ? "
+        "ORDER BY COALESCE(last_reviewed_at, 0) ASC, body_id ASC "
+        "LIMIT ?",
+        (scope, limit),
+    ).fetchall()
+    return [_row_to_record(r) for r in rows]
+
+
 def _row_to_record(row: sqlite3.Row) -> BodyRecord:
     return BodyRecord(
         body_id=row["body_id"],
