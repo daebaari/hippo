@@ -105,6 +105,19 @@ def find_oldest_unreviewed_active(
     return [_row_to_record(r) for r in rows]
 
 
+def find_active_bodies_by_run_source(
+    conn: sqlite3.Connection, *, run_id: int
+) -> list[BodyRecord]:
+    """Active bodies inserted by this heavy-dream run (by source string)."""
+    rows = conn.execute(
+        "SELECT * FROM bodies "
+        "WHERE archived = 0 AND source = ? "
+        "ORDER BY body_id ASC",
+        (f"heavy-dream-run:{run_id}",),
+    ).fetchall()
+    return [_row_to_record(r) for r in rows]
+
+
 def _row_to_record(row: sqlite3.Row) -> BodyRecord:
     return BodyRecord(
         body_id=row["body_id"],

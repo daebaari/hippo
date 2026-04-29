@@ -96,3 +96,35 @@ def test_find_oldest_unreviewed_active_filters_by_scope(sqlite_conn):
 
     out = find_oldest_unreviewed_active(sqlite_conn, scope="global", limit=10)
     assert [b.body_id for b in out] == ["g1"]
+
+
+def test_find_active_bodies_by_run_source_returns_only_run_bodies(sqlite_conn):
+    run_migrations(sqlite_conn)
+    insert_body(
+        sqlite_conn,
+        BodyRecord(
+            body_id="b-this", file_path="bodies/b-this.md", title="t",
+            scope="global", source="heavy-dream-run:42",
+        ),
+    )
+    insert_body(
+        sqlite_conn,
+        BodyRecord(
+            body_id="b-other", file_path="bodies/b-other.md", title="t",
+            scope="global", source="heavy-dream-run:7",
+        ),
+    )
+    insert_body(
+        sqlite_conn,
+        BodyRecord(
+            body_id="b-arch", file_path="bodies/b-arch.md", title="t",
+            scope="global", source="heavy-dream-run:42",
+        ),
+    )
+    sqlite_conn.execute("UPDATE bodies SET archived = 1 WHERE body_id = 'b-arch'")
+    sqlite_conn.commit()
+
+    from hippo.storage.bodies import find_active_bodies_by_run_source
+
+    out = find_active_bodies_by_run_source(sqlite_conn, run_id=42)
+    assert [b.body_id for b in out] == ["b-this"]
