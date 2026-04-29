@@ -10,7 +10,6 @@ dependencies = [
     "mlx-lm>=0.19",
     "sentence-transformers>=3.0",
     "huggingface-hub>=0.26",
-    "google-genai>=1.0",
 ]
 
 [project.scripts]
@@ -18,6 +17,11 @@ memory-stats   = "hippo.cli.stats:main"
 memory-get     = "hippo.cli.get:main"
 memory-search  = "hippo.cli.search:main"
 memory-archive = "hippo.cli.archive:main"
+
+[project.optional-dependencies]
+gemini = [
+    "google-genai>=1.0",
+]
 
 [dependency-groups]
 dev = [

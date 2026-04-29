@@ -160,3 +160,17 @@ class TestSelectLLM:
         assert out is local
         err = capsys.readouterr().err
         assert "WARNING" in err and "qwen" in err.lower()
+
+
+def test_gemini_missing_dep_raises_configerror(monkeypatch, tmp_path):
+    """If google-genai is missing, GeminiLLM.load raises ConfigError with install hint."""
+    monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("GOOGLE_API_KEY", "x")
+    (tmp_path / "hippo-config.toml").write_text('backend = "gemini"\n')
+    # Force ImportError by blocking the `google` package
+    import sys as _sys
+    monkeypatch.setitem(_sys.modules, "google", None)
+    from hippo.config import ConfigError
+    from hippo.models.llm import select_llm
+    with pytest.raises(ConfigError, match="uv sync --extra gemini"):
+        select_llm(strict=True)

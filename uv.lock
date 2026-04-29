@@ -515,13 +515,17 @@ name = "hippo"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "google-genai" },
     { name = "huggingface-hub" },
     { name = "mlx" },
     { name = "mlx-lm" },
     { name = "python-frontmatter" },
     { name = "sentence-transformers" },
     { name = "sqlite-vec" },
+]
+
+[package.optional-dependencies]
+gemini = [
+    { name = "google-genai" },
 ]
 
 [package.dev-dependencies]
@@ -534,7 +538,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "google-genai", specifier = ">=1.0" },
+    { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.0" },
     { name = "huggingface-hub", specifier = ">=0.26" },
     { name = "mlx", specifier = ">=0.18" },
     { name = "mlx-lm", specifier = ">=0.19" },
@@ -542,6 +546,7 @@ requires-dist = [
     { name = "sentence-transformers", specifier = ">=3.0" },
     { name = "sqlite-vec", specifier = ">=0.1.5" },
 ]
+provides-extras = ["gemini"]
 
 [package.metadata.requires-dev]
 dev = [
