@@ -33,12 +33,55 @@ class DaemonClientProto(Protocol):
 
 
 def _resolve_project(cwd: str) -> str | None:
-    """Walk up from cwd; return the basename of the first dir that looks like a project root."""
+    """Walk up from cwd; return the basename of the first dir that looks like
+    a project root.
+
+    Git worktrees: when ``.git`` is a file (a worktree pointer like
+    ``gitdir: /path/to/main/.git/worktrees/<name>``), resolve to the MAIN
+    repo's basename so captures from a worktree land in the same scope as
+    the main checkout. Falls back to the worktree directory's own name if
+    the pointer can't be parsed.
+    """
     p = Path(cwd).resolve()
     for candidate in [p, *p.parents]:
-        if (candidate / ".git").exists() or (candidate / "CLAUDE.md").exists():
+        git_entry = candidate / ".git"
+        if git_entry.is_dir() or (candidate / "CLAUDE.md").exists():
             return candidate.name
+        if git_entry.is_file():
+            main_repo = _read_worktree_pointer(git_entry)
+            return main_repo.name if main_repo else candidate.name
     return None
+
+
+def _read_worktree_pointer(git_file: Path) -> Path | None:
+    """Parse a worktree's `.git` file. Returns the MAIN repo path, or None.
+
+    Format (per `man gitrepository-layout`):
+        gitdir: <absolute-or-relative-path-to>/.git/worktrees/<name>
+    The main repo is the parent of the `/.git/worktrees/<name>` segment.
+    """
+    try:
+        first_line = git_file.read_text().splitlines()[0].strip()
+    except (OSError, IndexError):
+        return None
+    prefix = "gitdir:"
+    if not first_line.startswith(prefix):
+        return None
+    pointer = first_line[len(prefix):].strip()
+    if not pointer:
+        return None
+    pointer_path = Path(pointer)
+    if not pointer_path.is_absolute():
+        pointer_path = (git_file.parent / pointer_path).resolve()
+    # pointer_path is .../<main>/.git/worktrees/<name>
+    parts = pointer_path.parts
+    try:
+        idx = len(parts) - 1 - list(reversed(parts)).index(".git")
+    except ValueError:
+        return None
+    if idx < 1:
+        return None
+    return Path(*parts[:idx])
 
 
 def handle_userprompt_submit(
