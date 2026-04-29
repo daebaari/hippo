@@ -16,6 +16,7 @@ class FakeLLM:
     def __init__(self, response: str) -> None:
         self.response = response
         self.calls: list[str] = []
+        self.thinking_levels: list[str | None] = []
 
     def generate_chat(
         self,
@@ -26,6 +27,7 @@ class FakeLLM:
         thinking_level: str | None = None,
     ) -> str:
         self.calls.append(messages[-1]["content"])
+        self.thinking_levels.append(thinking_level)
         return self.response
 
 
@@ -110,6 +112,10 @@ def test_resolve_contradictions_archives_loser(tmp_path, monkeypatch):
     loser_head = get_head(store.conn, b_head_id)
     assert loser_head is not None
     assert loser_head.archived
+
+    # Regression: assert thinking_level="minimal" was passed
+    assert all(level == "minimal" for level in llm.thinking_levels)
+    assert llm.thinking_levels  # at least one call
 
     store.conn.close()
 

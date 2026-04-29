@@ -16,6 +16,9 @@ from hippo.storage.vec import insert_head_embedding
 class StubLLM:
     """Always returns a 'causes' edge."""
 
+    def __init__(self) -> None:
+        self.thinking_levels: list[str | None] = []
+
     def generate_chat(
         self,
         messages: list[dict[str, str]],
@@ -24,6 +27,7 @@ class StubLLM:
         max_tokens: int,
         thinking_level: str | None = None,
     ) -> str:
+        self.thinking_levels.append(thinking_level)
         return '{"relation":"causes","weight":0.8}'
 
 
@@ -72,7 +76,8 @@ def test_propose_edges_creates_edge_for_similar_heads(store: object) -> None:
     insert_head_embedding(store.conn, "head-a", emb_a)  # type: ignore[attr-defined]
     insert_head_embedding(store.conn, "head-b", emb_b)  # type: ignore[attr-defined]
 
-    count = propose_edges(store=store, llm=StubLLM())  # type: ignore[arg-type]
+    stub_llm = StubLLM()
+    count = propose_edges(store=store, llm=stub_llm)  # type: ignore[arg-type]
 
     assert count == 1
 
@@ -82,6 +87,10 @@ def test_propose_edges_creates_edge_for_similar_heads(store: object) -> None:
     assert row is not None
     assert row["relation"] == "causes"
     assert abs(float(row["weight"]) - 0.8) < 1e-6
+
+    # Regression: assert thinking_level="minimal" was passed
+    assert all(level == "minimal" for level in stub_llm.thinking_levels)
+    assert stub_llm.thinking_levels  # at least one call
 
 
 def test_propose_edges_skips_dissimilar_heads(store: object) -> None:
