@@ -14,7 +14,7 @@ class FakeLLM:
     def __init__(self, response: str) -> None:
         self.response = response
         self.calls: list[str] = []
-    def generate_chat(self, messages, *, temperature, max_tokens):
+    def generate_chat(self, messages, *, temperature, max_tokens, thinking_level=None):
         self.calls.append(messages[-1]["content"])
         return self.response
 

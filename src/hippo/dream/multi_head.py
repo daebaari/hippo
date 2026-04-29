@@ -8,16 +8,11 @@ from uuid import uuid4
 
 from hippo.dream.atomize import _strip_fences  # reuse
 from hippo.dream.prompts import render
+from hippo.models.llm import LLMProto
 from hippo.storage.body_files import read_body_file
 from hippo.storage.heads import HeadRecord, insert_head, list_heads_for_body
 from hippo.storage.multi_store import Store
 from hippo.storage.vec import insert_head_embedding
-
-
-class LLMProto(Protocol):
-    def generate_chat(
-        self, messages: list[dict[str, str]], *, temperature: float, max_tokens: int
-    ) -> str: ...
 
 
 class DaemonProto(Protocol):

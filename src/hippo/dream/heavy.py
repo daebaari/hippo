@@ -10,14 +10,9 @@ from hippo.dream.contradiction import resolve_contradictions
 from hippo.dream.edge_proposal import propose_edges
 from hippo.dream.multi_head import expand_heads_for_eligible_bodies
 from hippo.lock import LockHeldError, acquire_lock, release_lock
+from hippo.models.llm import LLMProto
 from hippo.storage.dream_runs import complete_run, fail_run, start_run
 from hippo.storage.multi_store import Scope, open_store
-
-
-class LLMProto(Protocol):
-    def generate_chat(
-        self, messages: list[dict[str, str]], *, temperature: float, max_tokens: int
-    ) -> str: ...
 
 
 class DaemonProto(Protocol):

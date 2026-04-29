@@ -17,7 +17,12 @@ class StubLLM:
     """Always returns a 'causes' edge."""
 
     def generate_chat(
-        self, messages: list[dict[str, str]], *, temperature: float, max_tokens: int
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        max_tokens: int,
+        thinking_level: str | None = None,
     ) -> str:
         return '{"relation":"causes","weight":0.8}'
 

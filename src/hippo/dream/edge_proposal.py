@@ -4,21 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Protocol
 
 from hippo.dream.atomize import _strip_fences
 from hippo.dream.cluster import cluster_active_heads
 from hippo.dream.prompts import render
+from hippo.models.llm import LLMProto
 from hippo.storage.edges import EdgeRecord, insert_edge_with_reciprocal
 from hippo.storage.heads import get_head
 from hippo.storage.multi_store import Store
-
-
-class LLMProto(Protocol):
-    def generate_chat(
-        self, messages: list[dict[str, str]], *, temperature: float, max_tokens: int
-    ) -> str: ...
-
 
 VALID_RELATIONS = {"causes", "supersedes", "contradicts", "applies_when", "related"}
 

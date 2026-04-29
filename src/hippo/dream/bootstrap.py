@@ -15,17 +15,12 @@ from uuid import uuid4
 
 from hippo.dream.atomize import _strip_fences
 from hippo.dream.prompts import render
+from hippo.models.llm import LLMProto
 from hippo.storage.bodies import BodyRecord, insert_body
 from hippo.storage.body_files import BodyFile, write_body_file
 from hippo.storage.heads import HeadRecord, insert_head
 from hippo.storage.multi_store import Scope, open_store
 from hippo.storage.vec import insert_head_embedding
-
-
-class LLMProto(Protocol):
-    def generate_chat(
-        self, messages: list[dict[str, str]], *, temperature: float, max_tokens: int
-    ) -> str: ...
 
 
 class DaemonProto(Protocol):

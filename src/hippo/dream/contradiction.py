@@ -2,20 +2,14 @@
 from __future__ import annotations
 
 import json
-from typing import Protocol
 
 from hippo.dream.atomize import _strip_fences
 from hippo.dream.prompts import render
+from hippo.models.llm import LLMProto
 from hippo.storage.bodies import archive_body, get_body
 from hippo.storage.body_files import read_body_file
 from hippo.storage.heads import archive_head, get_head, list_heads_for_body
 from hippo.storage.multi_store import Store
-
-
-class LLMProto(Protocol):
-    def generate_chat(
-        self, messages: list[dict[str, str]], *, temperature: float, max_tokens: int
-    ) -> str: ...
 
 
 def resolve_contradictions(*, store: Store, llm: LLMProto) -> int:
