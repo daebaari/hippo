@@ -20,6 +20,10 @@ source of truth when this repo's docs and the spec disagree.
   (UserPromptSubmit, Stop, PreCompact). Coexist with any pre-existing hooks.
 - `autoMemoryEnabled` and `autoDreamEnabled` are **off** in user settings —
   Hippo replaces both. Do not re-enable without checking with the user.
+- LLM backend: switch with `/hippo-backend`; default qwen; persisted in
+  `~/.claude/hippo-config.toml`. Gemini also reads
+  `~/.claude/hippo-secrets` (mode 600) for the API key. See
+  `src/hippo/config.py` and `src/hippo/models/llm.py` for current values.
 
 ## Stack pattern (important)
 
@@ -91,7 +95,3 @@ RUN_LLM_TESTS=1 uv run pytest tests/test_llm.py -v
   `finally`. Same for `.light-lock` for light dream. The
   `cleanup-stale-consolidate-locks.sh` SessionStart hook (in `~/.claude/`)
   sweeps dead-PID and >1h-old locks.
-- The Gemini backend implementation from a Plan 7 overreach is preserved in a
-  git stash (`stash@{0}: gemini-backend-wip-from-plan7-overreach`). Future
-  Plan 9 should design the dual-backend swap properly with a real spec
-  rather than cherry-picking from the stash blindly.

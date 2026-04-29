@@ -112,19 +112,3 @@ and byte-match to spec, but a fresh-machine install has not been exercised
 end-to-end. First real test will happen when this is installed on a clean
 environment; expect to find and fix issues there.
 
-## Gemini backend exists as an unmerged stash
-
-A Plan 7 implementer overreach landed a partial dual-backend implementation
-(LocalLLM + GeminiLLM via `HIPPO_LLM_BACKEND` env var, with `thinking_level`
-threaded through `LLMProto`) without a design or review. Code currently sits
-in a git stash:
-
-```bash
-git stash list
-# stash@{0}: On main: gemini-backend-wip-from-plan7-overreach
-```
-
-Don't `git stash apply` blindly — the `thinking_level` cross-cut into the
-LLM Protocol is a contract change that deserves a real spec. Future Plan 9
-should either rewrite from scratch or apply selectively after a proper
-design review.

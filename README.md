@@ -31,6 +31,9 @@ scripts/uninstall.sh                      # remove hooks + launchd, keep data
 
 # run the test suite:
 uv run pytest
+
+# optional: cloud Gemini backend (toggle with /hippo-backend)
+uv sync --extra gemini
 ```
 
 See `docs/operations.md` for the operations guide (daemon health, manual
