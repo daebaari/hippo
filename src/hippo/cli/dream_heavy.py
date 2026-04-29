@@ -7,9 +7,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from hippo.config import ConfigError
 from hippo.daemon.client import DaemonClient
 from hippo.dream.heavy import run_heavy_dream_all_scopes
-from hippo.models.llm import LocalLLM
+from hippo.models.llm import select_llm
 from hippo.storage.multi_store import Scope
 
 
@@ -27,6 +28,11 @@ def main() -> int:
     p.add_argument("--force", action="store_true", help="bypass AC check")
     p.add_argument("--project", action="append", default=[])
     p.add_argument("--global-only", action="store_true")
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="hard-fail on backend misconfiguration",
+    )
     args = p.parse_args()
 
     if not args.force and not _is_on_ac():
@@ -42,7 +48,11 @@ def main() -> int:
         scopes = [Scope.global_()]
 
     daemon = DaemonClient(socket_path=Path.home() / ".claude" / "memory-daemon.sock")
-    llm = LocalLLM.load()
+    try:
+        llm = select_llm(strict=args.strict)
+    except ConfigError as exc:
+        sys.stderr.write(f"ERROR: {exc}\n")
+        return 1
     stats = run_heavy_dream_all_scopes(scopes=scopes, llm=llm, daemon=daemon)
     print("heavy dream complete:")
     print(json.dumps(stats, indent=2))
