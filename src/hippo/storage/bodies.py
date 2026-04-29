@@ -6,7 +6,9 @@ body_files.py). Callers should keep the two in sync.
 """
 from __future__ import annotations
 
+import math
 import sqlite3
+import struct
 import time
 from dataclasses import dataclass
 
@@ -116,6 +118,72 @@ def find_active_bodies_by_run_source(
         (f"heavy-dream-run:{run_id}",),
     ).fetchall()
     return [_row_to_record(r) for r in rows]
+
+
+def find_merge_candidates(
+    conn: sqlite3.Connection,
+    *,
+    body_id: str,
+    threshold: float,
+    k: int,
+) -> list[tuple[BodyRecord, float]]:
+    """Active bodies whose nearest head to any of body_id's heads has cosine >= threshold.
+
+    Returns up to k items, sorted by max similarity DESC. Excludes body_id itself,
+    archived bodies, and bodies whose only candidacy is below threshold.
+    """
+    self_rows = conn.execute(
+        "SELECT he.embedding "
+        "FROM heads h JOIN head_embeddings he ON he.head_id = h.head_id "
+        "WHERE h.body_id = ? AND h.archived = 0",
+        (body_id,),
+    ).fetchall()
+    if not self_rows:
+        return []
+    self_vecs = [_unpack_embedding(r["embedding"]) for r in self_rows]
+
+    other_rows = conn.execute(
+        "SELECT h.body_id AS cand_body_id, he.embedding "
+        "FROM heads h JOIN head_embeddings he ON he.head_id = h.head_id "
+        "JOIN bodies b ON b.body_id = h.body_id "
+        "WHERE h.archived = 0 AND b.archived = 0 AND h.body_id != ? "
+        "  AND b.body_id != ?",
+        (body_id, body_id),
+    ).fetchall()
+
+    best_sim_per_body: dict[str, float] = {}
+    for r in other_rows:
+        cand_vec = _unpack_embedding(r["embedding"])
+        max_sim = max(_cosine_similarity(sv, cand_vec) for sv in self_vecs)
+        cand_body = r["cand_body_id"]
+        prior = best_sim_per_body.get(cand_body, -2.0)
+        if max_sim > prior:
+            best_sim_per_body[cand_body] = max_sim
+
+    qualifying = [(cand_id, sim) for cand_id, sim in best_sim_per_body.items() if sim >= threshold]
+    qualifying.sort(key=lambda t: t[1], reverse=True)
+    qualifying = qualifying[:k]
+
+    out: list[tuple[BodyRecord, float]] = []
+    for cand_body_id, sim in qualifying:
+        rec = get_body(conn, cand_body_id)
+        if rec is not None and not rec.archived:
+            out.append((rec, sim))
+    return out
+
+
+def _unpack_embedding(blob: bytes) -> list[float]:
+    from hippo.config import EMBEDDING_DIM
+    return list(struct.unpack(f"{EMBEDDING_DIM}f", blob))
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
 
 
 def _row_to_record(row: sqlite3.Row) -> BodyRecord:
