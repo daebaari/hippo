@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
+from hippo.capture.userprompt_hook import _resolve_project
 from hippo.config import (
     RETRIEVAL_HOP_LIMIT_PER_SEED,
     RETRIEVAL_RERANK_TOP_K,
@@ -32,7 +34,13 @@ def memory_search_cli(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     daemon = DaemonClient(socket_path=Path(args.socket))
-    scopes = [Scope.global_()] + [Scope.project(proj) for proj in args.project]
+    scopes = [Scope.global_()]
+    if args.project:
+        scopes.extend(Scope.project(proj) for proj in args.project)
+    else:
+        cwd_project = _resolve_project(os.getcwd())
+        if cwd_project:
+            scopes.append(Scope.project(cwd_project))
     pipeline = RetrievalPipeline(daemon=daemon, scopes=scopes, **DEFAULTS)
     result = pipeline.run(args.query)
     # body_resolver: figure out which scope's bodies/ dir to read from

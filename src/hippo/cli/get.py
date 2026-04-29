@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
-from hippo.config import BODIES_SUBDIR
+from hippo.capture.userprompt_hook import _resolve_project
+from hippo.config import BODIES_SUBDIR, DB_FILENAME, PROJECTS_ROOT
 from hippo.storage.body_files import read_body_file
 from hippo.storage.heads import get_head
 from hippo.storage.multi_store import Scope, open_store
@@ -14,10 +16,22 @@ def get_body_cli(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="memory-get")
     p.add_argument("head_id")
     p.add_argument("--project", action="append", default=[],
-                   help="Project scope(s) to search alongside global. Can repeat.")
+                   help="Project scope(s) to search alongside global. Can repeat. "
+                        "If omitted, auto-detects project from cwd; if cwd is not "
+                        "inside a project, scans all known project DBs.")
     args = p.parse_args(argv)
 
-    scopes = [Scope.global_()] + [Scope.project(proj) for proj in args.project]
+    scopes = [Scope.global_()]
+    if args.project:
+        scopes.extend(Scope.project(proj) for proj in args.project)
+    else:
+        cwd_project = _resolve_project(os.getcwd())
+        if cwd_project:
+            scopes.append(Scope.project(cwd_project))
+        elif PROJECTS_ROOT.exists():
+            for entry in sorted(PROJECTS_ROOT.iterdir()):
+                if (entry / "memory" / DB_FILENAME).exists():
+                    scopes.append(Scope.project(entry.name))
     for scope in scopes:
         store = open_store(scope)
         try:
