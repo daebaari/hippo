@@ -1,8 +1,11 @@
 """Tests for schema migrations and connection helpers."""
 from __future__ import annotations
 
+import sqlite3
 import struct
 from pathlib import Path
+
+import sqlite_vec
 
 from hippo.storage.connection import open_connection
 from hippo.storage.migrations import current_version, run_migrations
@@ -64,12 +67,6 @@ def _to_vec_blob(vec: list[float]) -> bytes:
 
 def test_migration_002_adds_prune_columns(tmp_path: Path) -> None:
     """002 adds bodies.last_reviewed_at and dream_runs.bodies_archived_review."""
-    import sqlite3
-
-    import sqlite_vec
-
-    from hippo.storage.migrations import run_migrations
-
     db = tmp_path / "memory.db"
     conn = sqlite3.connect(db)
     conn.enable_load_extension(True)

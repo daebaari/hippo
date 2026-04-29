@@ -7,7 +7,6 @@ soft-archives the loser. Modes A (factually superseded) and D
 from __future__ import annotations
 
 import json
-from typing import Protocol
 
 from hippo.dream.atomize import _strip_fences
 from hippo.dream.prompts import render
@@ -17,10 +16,6 @@ from hippo.storage.body_files import read_body_file
 from hippo.storage.multi_store import Store
 
 _VALID_DECISIONS: frozenset[str] = frozenset({"merge", "supersede", "keep_both"})
-
-
-class DaemonProto(Protocol):
-    def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
 def _judge_pair(

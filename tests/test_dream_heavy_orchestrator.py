@@ -115,6 +115,14 @@ def test_heavy_dream_runs_review_phase_and_records_counter(tmp_path, monkeypatch
             session_id="sess-A", user_message="we use postgres", assistant_message="ok",
         ),
     )
+    # Second capture so two atoms are created; their identical FakeDaemon embeddings
+    # will make them merge candidates (cosine=1.0 > threshold), guaranteeing a review LLM call.
+    enqueue_capture(
+        s.conn,
+        CaptureRecord(
+            session_id="sess-B", user_message="we still use postgres", assistant_message="yes",
+        ),
+    )
     s.conn.close()
 
     llm = FakeLLM()
@@ -133,4 +141,34 @@ def test_heavy_dream_runs_review_phase_and_records_counter(tmp_path, monkeypatch
     ).fetchone()
     assert row is not None
     assert row["bodies_archived_review"] == result["bodies_archived_review"]
+
+    # Assert phase ordering by inspecting LLM call sequence.
+    # Each phase has a distinctive prompt-content substring; first index of each
+    # must be in the expected order. (multi_head/edge/contradiction may be no-ops
+    # given the tiny test corpus, so we tolerate them missing.)
+    def _first_index(needle: str) -> int | None:
+        for i, content in enumerate(llm.calls):
+            if needle in content:
+                return i
+        return None
+
+    atomize_idx = _first_index("extracting durable memory atoms")
+    review_idx = _first_index("deciding whether two memory atoms are redundant")
+    assert atomize_idx is not None, "atomize prompt should have been called"
+    assert review_idx is not None, "review prompt should have been called"
+    assert atomize_idx < review_idx, (
+        "atomize must run before review_new_atoms / review_rolling_slice"
+    )
+    # Optional later phases — assert they're after review if they ran at all
+    multi_head_idx = _first_index("generating diverse keyword summaries")
+    edge_idx = _first_index("deciding whether two memory heads are related")
+    contradict_idx = _first_index("deciding whether two memory atoms genuinely contradict")
+    for later_idx, label in [
+        (multi_head_idx, "multi_head"),
+        (edge_idx, "edge_proposal"),
+        (contradict_idx, "contradiction"),
+    ]:
+        if later_idx is not None:
+            assert review_idx < later_idx, f"review must precede {label}"
+
     s.conn.close()

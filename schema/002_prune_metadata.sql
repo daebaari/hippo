@@ -1,5 +1,5 @@
 -- Schema migration 002: prune-phase metadata
--- Idempotent — uses ADD COLUMN guards via sqlite_master lookup, IF NOT EXISTS for indexes.
+-- Idempotent — applied at most once per DB via the schema_versions tracker (see src/hippo/storage/migrations.py); IF NOT EXISTS for indexes.
 
 -- Add last_reviewed_at to bodies (nullable; existing rows stay NULL → sort first in rolling slice)
 -- sqlite has no "ADD COLUMN IF NOT EXISTS"; use a guarded approach via PRAGMA.
