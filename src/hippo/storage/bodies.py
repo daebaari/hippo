@@ -79,6 +79,15 @@ def list_bodies_by_scope(conn: sqlite3.Connection, scope: str) -> list[BodyRecor
     return [_row_to_record(r) for r in rows]
 
 
+def update_last_reviewed_at(conn: sqlite3.Connection, body_id: str) -> None:
+    """Stamp last_reviewed_at = now for a body."""
+    conn.execute(
+        "UPDATE bodies SET last_reviewed_at = ? WHERE body_id = ?",
+        (int(time.time()), body_id),
+    )
+    conn.commit()
+
+
 def _row_to_record(row: sqlite3.Row) -> BodyRecord:
     return BodyRecord(
         body_id=row["body_id"],
