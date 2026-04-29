@@ -53,7 +53,10 @@ def resolve_contradictions(*, store: Store, llm: LLMProto) -> int:
             b_body=b_md,
         )
         raw = llm.generate_chat(
-            [{"role": "user", "content": prompt}], temperature=0.0, max_tokens=400
+            [{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=400,
+            thinking_level="minimal",
         )
         try:
             obj = json.loads(_strip_fences(raw))

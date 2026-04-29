@@ -42,6 +42,7 @@ def propose_edges(*, store: Store, llm: LLMProto) -> int:
                     [{"role": "user", "content": prompt}],
                     temperature=0.1,
                     max_tokens=200,
+                    thinking_level="minimal",
                 )
                 try:
                     obj = json.loads(_strip_fences(raw))
