@@ -71,3 +71,87 @@ def test_atomize_handles_empty_response(tmp_path, monkeypatch):
     )
     assert n == 0
     s.conn.close()
+
+
+def test_atomize_skips_noise_atoms(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    s = open_store(Scope.global_())
+    enqueue_capture(s.conn, CaptureRecord(
+        session_id="sess-A", user_message="status", assistant_message="ok",
+    ))
+    s.conn.close()
+
+    fake = json.dumps([
+        {
+            "title": "Durable",
+            "body": "Real durable content.",
+            "scope": "global",
+            "heads": ["one head"],
+            "noise": False,
+        },
+        {
+            "title": "Noise",
+            "body": "ok thanks",
+            "scope": "global",
+            "heads": ["chatter"],
+            "noise": True,
+        },
+    ])
+    s = open_store(Scope.global_())
+    n = atomize_session(
+        store=s, session_id="sess-A", project=None, run_id=1,
+        llm=FakeLLM(fake), daemon=FakeDaemon(),
+    )
+    assert n == 1
+    titles = [b.title for b in list_bodies_by_scope(s.conn, "global")]
+    assert titles == ["Durable"]
+    s.conn.close()
+
+
+def test_atomize_treats_missing_noise_field_as_false(tmp_path, monkeypatch):
+    """Backward compat: old prompts returning no noise field still insert."""
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    s = open_store(Scope.global_())
+    enqueue_capture(s.conn, CaptureRecord(
+        session_id="sess-A", user_message="x", assistant_message="y",
+    ))
+    s.conn.close()
+
+    fake = json.dumps([{
+        "title": "No noise field",
+        "body": "content",
+        "scope": "global",
+        "heads": ["h"],
+    }])
+    s = open_store(Scope.global_())
+    n = atomize_session(
+        store=s, session_id="sess-A", project=None, run_id=1,
+        llm=FakeLLM(fake), daemon=FakeDaemon(),
+    )
+    assert n == 1
+    s.conn.close()
+
+
+def test_atomize_treats_string_noise_as_truthy(tmp_path, monkeypatch):
+    """LLM occasionally returns 'true' (string) instead of bool true; treat as truthy."""
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    s = open_store(Scope.global_())
+    enqueue_capture(s.conn, CaptureRecord(
+        session_id="sess-A", user_message="x", assistant_message="y",
+    ))
+    s.conn.close()
+
+    fake = json.dumps([{
+        "title": "stringy noise",
+        "body": "content",
+        "scope": "global",
+        "heads": ["h"],
+        "noise": "true",
+    }])
+    s = open_store(Scope.global_())
+    n = atomize_session(
+        store=s, session_id="sess-A", project=None, run_id=1,
+        llm=FakeLLM(fake), daemon=FakeDaemon(),
+    )
+    assert n == 0
+    s.conn.close()

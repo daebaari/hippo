@@ -29,6 +29,25 @@ def _strip_fences(s: str) -> str:
     return s.strip()
 
 
+def _is_noise(atom: object) -> bool:
+    """Permissive truthy check on the optional `noise` field.
+
+    Accepts bool, "true"/"false" strings, and integers. Default False.
+    """
+    if not isinstance(atom, dict):
+        return False
+    val = atom.get("noise")
+    if val is None:
+        return False
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.strip().lower() in ("true", "1", "yes")
+    if isinstance(val, int | float):
+        return bool(val)
+    return False
+
+
 def atomize_session(
     *, store: Store, session_id: str, project: str | None, run_id: int,
     llm: LLMProto, daemon: DaemonProto,
@@ -67,6 +86,8 @@ def atomize_session(
 
     n_bodies = 0
     for atom in atoms:
+        if _is_noise(atom):
+            continue
         title = atom.get("title", "")[:120]
         body_content = atom.get("body", "")
         heads = atom.get("heads", [])
