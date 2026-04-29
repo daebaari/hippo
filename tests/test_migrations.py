@@ -30,7 +30,7 @@ def test_run_migrations_is_idempotent(temp_memory_dir: Path) -> None:
     conn = open_connection(db_path)
     run_migrations(conn)
     run_migrations(conn)  # second call must not raise
-    assert current_version(conn) == 1
+    assert current_version(conn) == 2
 
 
 def test_sqlite_vec_extension_loaded(temp_memory_dir: Path) -> None:
@@ -60,3 +60,37 @@ def test_head_embeddings_virtual_table_works(temp_memory_dir: Path) -> None:
 def _to_vec_blob(vec: list[float]) -> bytes:
     """sqlite-vec accepts vectors as either JSON or float32 packed bytes."""
     return struct.pack(f"{len(vec)}f", *vec)
+
+
+def test_migration_002_adds_prune_columns(tmp_path: Path) -> None:
+    """002 adds bodies.last_reviewed_at and dream_runs.bodies_archived_review."""
+    import sqlite3
+
+    import sqlite_vec
+
+    from hippo.storage.migrations import run_migrations
+
+    db = tmp_path / "memory.db"
+    conn = sqlite3.connect(db)
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.enable_load_extension(False)
+    conn.row_factory = sqlite3.Row
+
+    run_migrations(conn)
+
+    body_cols = {row["name"] for row in conn.execute("PRAGMA table_info(bodies)").fetchall()}
+    assert "last_reviewed_at" in body_cols
+
+    run_cols = {row["name"] for row in conn.execute("PRAGMA table_info(dream_runs)").fetchall()}
+    assert "bodies_archived_review" in run_cols
+
+    # Partial index exists
+    idx = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_bodies_review_queue'"
+    ).fetchone()
+    assert idx is not None
+
+    # Re-running is idempotent
+    run_migrations(conn)
+    conn.close()
