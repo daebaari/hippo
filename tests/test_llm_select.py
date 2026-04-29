@@ -66,10 +66,6 @@ class TestGeminiRetry:
             llm._call_with_retry(contents="hi", config=None)
         assert llm.client.models.calls == 4
 
-    @pytest.mark.skipif(
-        True,
-        reason="google-genai not installed; covered by test suite with gemini extra",
-    )
     def test_does_not_retry_non_retryable_apierror(self, monkeypatch):
         from google.genai import errors  # type: ignore[import-untyped]
         monkeypatch.setattr(

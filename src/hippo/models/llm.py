@@ -95,7 +95,7 @@ class GeminiLLM:
         default_thinking_level: str,
     ) -> GeminiLLM:
         try:
-            from google import genai  # type: ignore[import-untyped]
+            from google import genai
         except ImportError as exc:
             from hippo.config import ConfigError
             raise ConfigError(
@@ -116,7 +116,7 @@ class GeminiLLM:
         max_tokens: int = 1024,
         thinking_level: str | None = None,
     ) -> str:
-        from google.genai import types  # type: ignore[import-untyped]
+        from google.genai import types
         if len(messages) == 1 and messages[0].get("role", "user") == "user":
             contents: Any = messages[0]["content"]
         else:
@@ -127,26 +127,16 @@ class GeminiLLM:
         config = types.GenerateContentConfig(
             temperature=temperature,
             max_output_tokens=max_tokens,
-            thinking_config=types.ThinkingConfig(thinking_level=level),
+            thinking_config=types.ThinkingConfig(thinking_level=level),  # type: ignore[arg-type]
         )
         return self._call_with_retry(contents=contents, config=config)
 
     def _call_with_retry(self, *, contents: Any, config: Any) -> str:
-        # Try to import APIError class; we'll check for it dynamically
-        api_error_class = None
-        try:
-            from google.genai import errors as genai_errors
-            api_error_class = genai_errors.APIError
-        except ImportError:
-            pass
-
-        try:
-            import httpx as httpx_lib
-            _network_excs: tuple[type[BaseException], ...] = (
-                OSError, TimeoutError, httpx_lib.RequestError,
-            )
-        except ImportError:
-            _network_excs = (OSError, TimeoutError)
+        import httpx
+        from google.genai import errors
+        _network_excs: tuple[type[BaseException], ...] = (
+            OSError, TimeoutError, httpx.RequestError,
+        )
 
         for attempt in range(self.max_attempts):
             try:
@@ -154,20 +144,15 @@ class GeminiLLM:
                     model=self.model_id, contents=contents, config=config
                 )
                 return resp.text or ""
-            except BaseException as e:
-                # Check for APIError if google.genai is available
-                if api_error_class is not None and isinstance(e, api_error_class):
-                    code = getattr(e, "code", None)
-                    if code in _RETRYABLE_HTTP and attempt < self.max_attempts - 1:
-                        _sleep(2 ** attempt)
-                        continue
-                    raise
-                # Retry network errors
-                if isinstance(e, _network_excs):
-                    if attempt < self.max_attempts - 1:
-                        _sleep(2 ** attempt)
-                        continue
-                    raise
-                # Non-retryable error, propagate
+            except errors.APIError as e:
+                code = getattr(e, "code", None)
+                if code in _RETRYABLE_HTTP and attempt < self.max_attempts - 1:
+                    _sleep(2 ** attempt)
+                    continue
+                raise
+            except _network_excs:
+                if attempt < self.max_attempts - 1:
+                    _sleep(2 ** attempt)
+                    continue
                 raise
         raise RuntimeError("unreachable")  # pragma: no cover
