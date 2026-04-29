@@ -9,6 +9,7 @@ Two implementations behind the shared `LLMProto` contract:
 """
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -156,3 +157,35 @@ class GeminiLLM:
                     continue
                 raise
         raise RuntimeError("unreachable")  # pragma: no cover
+
+
+def select_llm(*, strict: bool = False) -> LocalLLM | GeminiLLM:
+    """Return the configured LLM backend.
+
+    See ``hippo.config.Config`` for the toggle, ``hippo.config.load_api_key``
+    for the key resolution. If ``backend == "gemini"`` and no key is found,
+    ``strict=True`` raises ``ConfigError``; ``strict=False`` warns and falls
+    back to ``LocalLLM``.
+    """
+    from hippo.config import ConfigError, load_api_key, load_config
+    cfg = load_config()
+    if cfg.backend == "qwen":
+        return LocalLLM.load()
+    if cfg.backend == "gemini":
+        key = load_api_key()
+        if not key:
+            msg = (
+                "Gemini selected but no API key found. "
+                "Set GOOGLE_API_KEY (or GEMINI_API_KEY) or write to "
+                "~/.claude/hippo-secrets."
+            )
+            if strict:
+                raise ConfigError(msg)
+            print(f"WARNING: {msg} Falling back to qwen.", file=sys.stderr)
+            return LocalLLM.load()
+        return GeminiLLM.load(
+            api_key=key,
+            model_id=cfg.gemini_model_id,
+            default_thinking_level=cfg.gemini_default_thinking_level,
+        )
+    raise ConfigError(f"Unknown backend {cfg.backend!r}")  # pragma: no cover
