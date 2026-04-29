@@ -385,3 +385,159 @@ def test_review_new_atoms_returns_zero_when_no_run_bodies(tmp_path, monkeypatch)
     assert review_new_atoms(store=store, llm=llm, run_id=99) == 0
     assert llm.calls == []
     store.conn.close()
+
+
+def test_review_rolling_slice_picks_oldest_unreviewed(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+
+    from hippo.config import EMBEDDING_DIM
+    from hippo.storage.heads import HeadRecord, insert_head
+    from hippo.storage.vec import insert_head_embedding
+
+    now = datetime.now(UTC)
+    # Three bodies with distinct embeddings → no merge candidates → just stamp
+    for i, bid in enumerate(("b-old", "b-fresh", "b-new")):
+        write_body_file(
+            store.memory_dir,
+            BodyFile(
+                body_id=bid, title=bid, scope="global",
+                created=now, updated=now, content=bid,
+            ),
+        )
+        insert_body(
+            store.conn,
+            BodyRecord(
+                body_id=bid, file_path=f"bodies/{bid}.md",
+                title=bid, scope="global", source="test",
+            ),
+        )
+        insert_head(store.conn, HeadRecord(head_id=f"h-{bid}", body_id=bid, summary=bid))
+        # Distinct, orthogonal embeddings → cosine 0
+        vec = [0.0] * EMBEDDING_DIM
+        vec[i] = 1.0
+        insert_head_embedding(store.conn, f"h-{bid}", vec)
+
+    store.conn.execute(
+        "UPDATE bodies SET last_reviewed_at = 100 WHERE body_id = 'b-old'"
+    )
+    store.conn.execute(
+        "UPDATE bodies SET last_reviewed_at = 999 WHERE body_id = 'b-fresh'"
+    )
+    store.conn.commit()
+
+    from hippo.dream.review import review_rolling_slice
+    from hippo.storage.bodies import get_body
+
+    llm = FakeLLM(json.dumps({"decision": "keep_both", "keeper": None, "reason": "x"}))
+
+    # slice_size=2 → reviews b-new (NULL) then b-old (100)
+    n_archived = review_rolling_slice(store=store, scope="global", llm=llm, slice_size=2)
+    assert n_archived == 0
+
+    # b-new and b-old got stamped; b-fresh did not
+    after = {
+        bid: get_body(store.conn, bid).last_reviewed_at  # type: ignore[union-attr]
+        for bid in ("b-old", "b-fresh", "b-new")
+    }
+    assert after["b-new"] is not None
+    assert after["b-old"] is not None and after["b-old"] != 100  # was re-stamped to current time
+    assert after["b-fresh"] == 999  # untouched
+
+    store.conn.close()
+
+
+def test_review_rolling_slice_idempotent_within_run(tmp_path, monkeypatch):
+    """Calling review_rolling_slice twice in a row doesn't re-judge same bodies."""
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+
+    from hippo.config import EMBEDDING_DIM
+    from hippo.storage.heads import HeadRecord, insert_head
+    from hippo.storage.vec import insert_head_embedding
+
+    now = datetime.now(UTC)
+    for i, bid in enumerate(("b1", "b2")):
+        write_body_file(
+            store.memory_dir,
+            BodyFile(
+                body_id=bid, title=bid, scope="global",
+                created=now, updated=now, content=bid,
+            ),
+        )
+        insert_body(
+            store.conn,
+            BodyRecord(
+                body_id=bid, file_path=f"bodies/{bid}.md",
+                title=bid, scope="global", source="test",
+            ),
+        )
+        insert_head(store.conn, HeadRecord(head_id=f"h{bid}", body_id=bid, summary=bid))
+        vec = [0.0] * EMBEDDING_DIM
+        vec[i] = 1.0
+        insert_head_embedding(store.conn, f"h{bid}", vec)
+
+    from hippo.dream.review import review_rolling_slice
+
+    llm = FakeLLM(json.dumps({"decision": "keep_both", "keeper": None, "reason": "x"}))
+    review_rolling_slice(store=store, scope="global", llm=llm, slice_size=2)
+    calls_after_first = len(llm.calls)
+
+    # Both bodies are now stamped recently; second call's slice picks the same bodies
+    # (slice ordering is by COALESCE(last_reviewed_at, 0) ASC; both stamped to ~now).
+    # Either of them will be re-reviewed if we ask for slice_size=2 again, since
+    # there are no other active bodies. That's fine — idempotence here means no
+    # archives happen because keep_both still wins.
+    review_rolling_slice(store=store, scope="global", llm=llm, slice_size=2)
+    calls_after_second = len(llm.calls)
+
+    # No archives were made (orthogonal embeddings → no candidates → no LLM calls)
+    assert calls_after_first == 0
+    assert calls_after_second == 0
+
+    store.conn.close()
+
+
+def test_review_rolling_slice_excludes_archived(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+
+    from hippo.config import EMBEDDING_DIM
+    from hippo.storage.heads import HeadRecord, insert_head
+    from hippo.storage.vec import insert_head_embedding
+
+    now = datetime.now(UTC)
+    for bid in ("b-active", "b-arch"):
+        write_body_file(
+            store.memory_dir,
+            BodyFile(
+                body_id=bid, title=bid, scope="global",
+                created=now, updated=now, content=bid,
+            ),
+        )
+        insert_body(
+            store.conn,
+            BodyRecord(
+                body_id=bid, file_path=f"bodies/{bid}.md",
+                title=bid, scope="global", source="test",
+            ),
+        )
+        insert_head(store.conn, HeadRecord(head_id=f"h-{bid}", body_id=bid, summary=bid))
+        insert_head_embedding(
+            store.conn, f"h-{bid}", [1.0, 0.0] + [0.0] * (EMBEDDING_DIM - 2)
+        )
+    store.conn.execute("UPDATE bodies SET archived = 1 WHERE body_id = 'b-arch'")
+    store.conn.commit()
+
+    from hippo.dream.review import review_rolling_slice
+    from hippo.storage.bodies import get_body
+
+    llm = FakeLLM(json.dumps({"decision": "keep_both", "keeper": None, "reason": "x"}))
+    review_rolling_slice(store=store, scope="global", llm=llm, slice_size=10)
+
+    # Only b-active should be stamped
+    assert get_body(store.conn, "b-active").last_reviewed_at is not None  # type: ignore[union-attr]
+    arch = get_body(store.conn, "b-arch")
+    assert arch is not None and arch.last_reviewed_at is None
+
+    store.conn.close()

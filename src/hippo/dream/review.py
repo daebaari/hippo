@@ -135,3 +135,24 @@ def review_new_atoms(*, store: Store, llm: LLMProto, run_id: int) -> int:
             store=store, llm=llm, body_id=body.body_id,
         )
     return n_archived
+
+
+def review_rolling_slice(
+    *, store: Store, scope: str, llm: LLMProto, slice_size: int
+) -> int:
+    """Pass 2 — review the K oldest-unreviewed active bodies in scope.
+
+    NULL last_reviewed_at sorts first (never-reviewed bodies). Returns count
+    of bodies archived this slice.
+    """
+    from hippo.storage.bodies import find_oldest_unreviewed_active
+
+    slice_bodies = find_oldest_unreviewed_active(
+        store.conn, scope=scope, limit=slice_size,
+    )
+    n_archived = 0
+    for body in slice_bodies:
+        n_archived += _review_body_against_neighbors(
+            store=store, llm=llm, body_id=body.body_id,
+        )
+    return n_archived
