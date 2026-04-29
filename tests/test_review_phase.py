@@ -157,3 +157,150 @@ def test_judge_pair_missing_body_file_returns_keep_both(tmp_path, monkeypatch):
     assert decision == "keep_both"
     assert keeper is None
     store.conn.close()
+
+
+def _setup_b_and_c_with_high_similarity(store):
+    """Insert body B and body C such that find_merge_candidates(B) returns C."""
+    from hippo.config import EMBEDDING_DIM
+    from hippo.storage.heads import HeadRecord, insert_head
+    from hippo.storage.vec import insert_head_embedding
+
+    now = datetime.now(UTC)
+    for bid in ("bid-B", "bid-C"):
+        write_body_file(
+            store.memory_dir,
+            BodyFile(
+                body_id=bid, title=bid, scope="global",
+                created=now, updated=now, content=f"{bid} content",
+            ),
+        )
+        insert_body(
+            store.conn,
+            BodyRecord(
+                body_id=bid, file_path=f"bodies/{bid}.md",
+                title=bid, scope="global", source="test",
+            ),
+        )
+        head_id = f"h-{bid}"
+        insert_head(
+            store.conn, HeadRecord(head_id=head_id, body_id=bid, summary=bid)
+        )
+        # Identical embeddings → cosine 1.0
+        vec = [1.0, 0.0] + [0.0] * (EMBEDDING_DIM - 2)
+        insert_head_embedding(store.conn, head_id, vec)
+
+
+def test_review_body_archives_loser_on_merge(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+    _setup_b_and_c_with_high_similarity(store)
+
+    from hippo.dream.review import _review_body_against_neighbors
+    from hippo.storage.bodies import get_body
+
+    # Keeper = bid-B → bid-C must be archived
+    llm = FakeLLM(json.dumps({"decision": "merge", "keeper": "bid-B", "reason": "x"}))
+    archived = _review_body_against_neighbors(
+        store=store, llm=llm, body_id="bid-B",
+    )
+    assert archived == 1
+
+    loser = get_body(store.conn, "bid-C")
+    assert loser is not None
+    assert loser.archived
+    assert loser.archived_in_favor_of == "bid-B"
+    assert (loser.archive_reason or "").startswith("merged_into:")
+
+    # B was stamped
+    b = get_body(store.conn, "bid-B")
+    assert b is not None
+    assert b.last_reviewed_at is not None
+
+    # B's heads remain active; C's heads are archived
+    rows = store.conn.execute(
+        "SELECT body_id, archived FROM heads ORDER BY body_id"
+    ).fetchall()
+    by_bid = {r["body_id"]: r["archived"] for r in rows}
+    assert by_bid == {"bid-B": 0, "bid-C": 1}
+
+    store.conn.close()
+
+
+def test_review_body_archives_loser_on_supersede(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+    _setup_b_and_c_with_high_similarity(store)
+
+    from hippo.dream.review import _review_body_against_neighbors
+    from hippo.storage.bodies import get_body
+
+    llm = FakeLLM(json.dumps({"decision": "supersede", "keeper": "bid-C", "reason": "x"}))
+    archived = _review_body_against_neighbors(
+        store=store, llm=llm, body_id="bid-B",
+    )
+    assert archived == 1
+
+    loser = get_body(store.conn, "bid-B")
+    assert loser is not None
+    assert loser.archived
+    assert (loser.archive_reason or "").startswith("superseded_by:")
+    assert loser.archived_in_favor_of == "bid-C"
+
+    store.conn.close()
+
+
+def test_review_body_keep_both_archives_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+    _setup_b_and_c_with_high_similarity(store)
+
+    from hippo.dream.review import _review_body_against_neighbors
+    from hippo.storage.bodies import get_body
+
+    llm = FakeLLM(json.dumps({"decision": "keep_both", "keeper": None, "reason": "x"}))
+    archived = _review_body_against_neighbors(
+        store=store, llm=llm, body_id="bid-B",
+    )
+    assert archived == 0
+
+    assert not get_body(store.conn, "bid-B").archived  # type: ignore[union-attr]
+    assert not get_body(store.conn, "bid-C").archived  # type: ignore[union-attr]
+    # B was still stamped
+    assert get_body(store.conn, "bid-B").last_reviewed_at is not None  # type: ignore[union-attr]
+    store.conn.close()
+
+
+def test_review_body_with_no_candidates_stamps_and_returns_zero(tmp_path, monkeypatch):
+    """A body whose heads are far from everything else: no LLM call, just stamp."""
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+    # Only one body — no neighbors
+    now = datetime.now(UTC)
+    write_body_file(
+        store.memory_dir,
+        BodyFile(
+            body_id="bid-solo", title="solo", scope="global",
+            created=now, updated=now, content="content",
+        ),
+    )
+    insert_body(
+        store.conn,
+        BodyRecord(
+            body_id="bid-solo", file_path="bodies/bid-solo.md",
+            title="solo", scope="global", source="test",
+        ),
+    )
+
+    from hippo.dream.review import _review_body_against_neighbors
+    from hippo.storage.bodies import get_body
+
+    llm = FakeLLM(json.dumps({"decision": "merge", "keeper": "bid-solo", "reason": "x"}))
+    archived = _review_body_against_neighbors(
+        store=store, llm=llm, body_id="bid-solo",
+    )
+    assert archived == 0
+    # No LLM call should have happened
+    assert llm.calls == []
+    # Stamped anyway
+    assert get_body(store.conn, "bid-solo").last_reviewed_at is not None  # type: ignore[union-attr]
+    store.conn.close()
