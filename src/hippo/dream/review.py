@@ -117,3 +117,21 @@ def _review_body_against_neighbors(
 
     update_last_reviewed_at(store.conn, body_id)
     return archived
+
+
+def review_new_atoms(*, store: Store, llm: LLMProto, run_id: int) -> int:
+    """Pass 1 — review each body inserted by this heavy dream run.
+
+    Returns count of bodies archived.
+    """
+    from hippo.storage.bodies import find_active_bodies_by_run_source
+
+    new_bodies = find_active_bodies_by_run_source(store.conn, run_id=run_id)
+    n_archived = 0
+    for body in new_bodies:
+        # Re-check active state in case a previous iteration archived this body
+        # (it could have lost a head-to-head similarity contest with another new body).
+        n_archived += _review_body_against_neighbors(
+            store=store, llm=llm, body_id=body.body_id,
+        )
+    return n_archived

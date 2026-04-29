@@ -304,3 +304,84 @@ def test_review_body_with_no_candidates_stamps_and_returns_zero(tmp_path, monkey
     # Stamped anyway
     assert get_body(store.conn, "bid-solo").last_reviewed_at is not None  # type: ignore[union-attr]
     store.conn.close()
+
+
+def test_review_new_atoms_processes_only_run_bodies(tmp_path, monkeypatch):
+    """Bodies with source='heavy-dream-run:7' are reviewed; others are skipped."""
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+
+    from hippo.config import EMBEDDING_DIM
+    from hippo.storage.heads import HeadRecord, insert_head
+    from hippo.storage.vec import insert_head_embedding
+
+    now = datetime.now(UTC)
+    # Body from this run
+    write_body_file(
+        store.memory_dir,
+        BodyFile(
+            body_id="this-run", title="t", scope="global",
+            created=now, updated=now, content="content",
+        ),
+    )
+    insert_body(
+        store.conn,
+        BodyRecord(
+            body_id="this-run", file_path="bodies/this-run.md",
+            title="t", scope="global", source="heavy-dream-run:7",
+        ),
+    )
+    insert_head(
+        store.conn, HeadRecord(head_id="h-this", body_id="this-run", summary="x")
+    )
+    insert_head_embedding(store.conn, "h-this", [1.0, 0.0] + [0.0] * (EMBEDDING_DIM - 2))
+
+    # Body from a previous run (must NOT be touched by review_new_atoms)
+    write_body_file(
+        store.memory_dir,
+        BodyFile(
+            body_id="prev", title="p", scope="global",
+            created=now, updated=now, content="prev content",
+        ),
+    )
+    insert_body(
+        store.conn,
+        BodyRecord(
+            body_id="prev", file_path="bodies/prev.md",
+            title="p", scope="global", source="heavy-dream-run:6",
+        ),
+    )
+    insert_head(store.conn, HeadRecord(head_id="h-prev", body_id="prev", summary="y"))
+    # Identical embedding → would-be merge candidate
+    insert_head_embedding(store.conn, "h-prev", [1.0, 0.0] + [0.0] * (EMBEDDING_DIM - 2))
+
+    from hippo.dream.review import review_new_atoms
+    from hippo.storage.bodies import get_body
+
+    llm = FakeLLM(json.dumps({"decision": "merge", "keeper": "this-run", "reason": "x"}))
+    n_archived = review_new_atoms(store=store, llm=llm, run_id=7)
+    assert n_archived == 1
+
+    # The previous-run body got archived (loser)
+    prev = get_body(store.conn, "prev")
+    assert prev is not None
+    assert prev.archived
+
+    # The new body has last_reviewed_at stamped
+    new = get_body(store.conn, "this-run")
+    assert new is not None
+    assert new.last_reviewed_at is not None
+
+    store.conn.close()
+
+
+def test_review_new_atoms_returns_zero_when_no_run_bodies(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    store = open_store(Scope.global_())
+
+    from hippo.dream.review import review_new_atoms
+
+    llm = FakeLLM("")
+    assert review_new_atoms(store=store, llm=llm, run_id=99) == 0
+    assert llm.calls == []
+    store.conn.close()
