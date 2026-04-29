@@ -21,6 +21,7 @@ class DreamRunRecord:
     heads_created: int
     edges_created: int
     contradictions_resolved: int
+    bodies_archived_review: int
     error_message: str | None
 
 
@@ -41,17 +42,20 @@ def complete_run(
     heads_created: int = 0,
     edges_created: int = 0,
     contradictions_resolved: int = 0,
+    bodies_archived_review: int = 0,
 ) -> None:
     conn.execute(
         "UPDATE dream_runs SET status = 'completed', completed_at = ?, "
         "atoms_created = ?, heads_created = ?, edges_created = ?, "
-        "contradictions_resolved = ? WHERE run_id = ?",
+        "contradictions_resolved = ?, bodies_archived_review = ? "
+        "WHERE run_id = ?",
         (
             int(time.time()),
             atoms_created,
             heads_created,
             edges_created,
             contradictions_resolved,
+            bodies_archived_review,
             run_id,
         ),
     )
@@ -83,6 +87,7 @@ def get_recent_runs(conn: sqlite3.Connection, limit: int) -> list[DreamRunRecord
             heads_created=int(r["heads_created"] or 0),
             edges_created=int(r["edges_created"] or 0),
             contradictions_resolved=int(r["contradictions_resolved"] or 0),
+            bodies_archived_review=int(r["bodies_archived_review"] or 0),
             error_message=r["error_message"],
         )
         for r in rows

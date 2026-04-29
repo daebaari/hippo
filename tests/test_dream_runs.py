@@ -62,3 +62,16 @@ def test_get_recent_runs_orders_descending_by_started(conn: sqlite3.Connection) 
     c = start_run(conn, "heavy")
     runs = get_recent_runs(conn, limit=3)
     assert [r.run_id for r in runs] == [c, b, a]
+
+
+def test_complete_run_persists_bodies_archived_review(sqlite_conn):
+    from hippo.storage.dream_runs import complete_run, get_recent_runs, start_run
+    from hippo.storage.migrations import run_migrations
+
+    run_migrations(sqlite_conn)
+    run_id = start_run(sqlite_conn, "heavy")
+    complete_run(sqlite_conn, run_id, bodies_archived_review=4)
+
+    runs = get_recent_runs(sqlite_conn, limit=1)
+    assert len(runs) == 1
+    assert runs[0].bodies_archived_review == 4
