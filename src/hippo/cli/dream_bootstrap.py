@@ -11,14 +11,14 @@ import sys
 import time
 from pathlib import Path
 
-from hippo.config import HEAVY_LOCK_FILENAME
+from hippo.config import HEAVY_LOCK_FILENAME, ConfigError
 from hippo.daemon.client import DaemonClient
 from hippo.dream.bootstrap import atomize_legacy_files
 from hippo.dream.contradiction import resolve_contradictions
 from hippo.dream.edge_proposal import propose_edges
 from hippo.dream.multi_head import expand_heads_for_eligible_bodies
 from hippo.lock import LockHeldError, acquire_lock, release_lock
-from hippo.models.llm import LocalLLM
+from hippo.models.llm import select_llm
 from hippo.storage.multi_store import Scope, open_store
 
 
@@ -31,6 +31,7 @@ def main() -> int:
     )
     p.add_argument("--project", required=True, help="project name (e.g. kaleon)")
     p.add_argument("--no-archive", action="store_true", help="don't move files to .legacy/")
+    p.add_argument("--strict", action="store_true", help="hard-fail on backend misconfiguration")
     args = p.parse_args()
 
     legacy_dir = Path(args.memory_dir).expanduser()
@@ -70,7 +71,15 @@ def main() -> int:
         return 1
 
     try:
-        llm = LocalLLM.load()
+        try:
+            llm = select_llm(strict=args.strict)
+        except ConfigError as exc:
+            sys.stderr.write(f"ERROR: {exc}\n")
+            release_lock(g_handle)
+            release_lock(p_handle)
+            g_store.conn.close()
+            p_store.conn.close()
+            return 1
 
         # Atomize files
         n = atomize_legacy_files(
