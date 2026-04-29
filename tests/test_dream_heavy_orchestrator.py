@@ -30,6 +30,7 @@ class FakeLLM:
                 "body": "Some content",
                 "scope": "global",
                 "heads": ["one head"],
+                "noise": False,
             }])
         if "generating diverse keyword summaries" in content:
             return json.dumps(["another head"])
@@ -37,6 +38,8 @@ class FakeLLM:
             return json.dumps({"relation": "related", "weight": 0.5})
         if "deciding whether two memory atoms genuinely contradict" in content:
             return json.dumps({"contradicts": False})
+        if "deciding whether two memory atoms are redundant" in content:
+            return json.dumps({"decision": "keep_both", "keeper": None, "reason": "x"})
         return "[]"
 
 
@@ -98,3 +101,36 @@ def test_heavy_dream_lock_held_returns_skipped(tmp_path, monkeypatch):
     finally:
         from hippo.lock import release_lock
         release_lock(handle)
+
+
+def test_heavy_dream_runs_review_phase_and_records_counter(tmp_path, monkeypatch):
+    """End-to-end: heavy dream runs the review phase between atomize and multi_head,
+    populates bodies_archived_review in dream_runs, and exposes it in the result."""
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+
+    s = open_store(Scope.global_())
+    enqueue_capture(
+        s.conn,
+        CaptureRecord(
+            session_id="sess-A", user_message="we use postgres", assistant_message="ok",
+        ),
+    )
+    s.conn.close()
+
+    llm = FakeLLM()
+    daemon = FakeDaemon()
+    results = run_heavy_dream_all_scopes(scopes=[Scope.global_()], llm=llm, daemon=daemon)
+
+    result = results["global"]
+    assert "bodies_archived_review" in result
+    assert isinstance(result["bodies_archived_review"], int)
+
+    # The dream_runs row reflects the same counter
+    s = open_store(Scope.global_())
+    row = s.conn.execute(
+        "SELECT bodies_archived_review FROM dream_runs WHERE run_id = ?",
+        (result["run_id"],),
+    ).fetchone()
+    assert row is not None
+    assert row["bodies_archived_review"] == result["bodies_archived_review"]
+    s.conn.close()

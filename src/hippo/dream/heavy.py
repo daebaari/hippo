@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from hippo.config import HEAVY_LOCK_FILENAME
+from hippo.config import HEAVY_LOCK_FILENAME, PRUNE_ROLLING_SLICE_SIZE
 from hippo.dream.atomize import atomize_session
 from hippo.dream.cleanup import finalize_processed_captures
 from hippo.dream.contradiction import resolve_contradictions
 from hippo.dream.edge_proposal import propose_edges
 from hippo.dream.multi_head import expand_heads_for_eligible_bodies
+from hippo.dream.review import review_new_atoms, review_rolling_slice
 from hippo.lock import LockHeldError, acquire_lock, release_lock
 from hippo.models.llm import LLMProto
 from hippo.storage.dream_runs import complete_run, fail_run, start_run
@@ -35,6 +36,7 @@ def run_heavy_dream_for_scope(
     n_heads = 0
     n_edges = 0
     n_contradictions = 0
+    n_review_archived = 0
 
     try:
         # Phase a: atomize each session
@@ -58,6 +60,13 @@ def run_heavy_dream_for_scope(
             ]
             processed_ids.extend(cap_ids)
 
+        # Phase a2: review (gate-at-entry + rolling slice)
+        n_review_archived += review_new_atoms(store=store, llm=llm, run_id=run_id)
+        n_review_archived += review_rolling_slice(
+            store=store, scope=scope.as_string(),
+            llm=llm, slice_size=PRUNE_ROLLING_SLICE_SIZE,
+        )
+
         # Phase b: multi-head expansion
         n_heads += expand_heads_for_eligible_bodies(store=store, llm=llm, daemon=daemon)
 
@@ -74,6 +83,7 @@ def run_heavy_dream_for_scope(
             store.conn, run_id,
             atoms_created=n_atoms, heads_created=n_heads,
             edges_created=n_edges, contradictions_resolved=n_contradictions,
+            bodies_archived_review=n_review_archived,
         )
         return {
             "run_id": run_id,
@@ -81,6 +91,7 @@ def run_heavy_dream_for_scope(
             "heads_created": n_heads,
             "edges_created": n_edges,
             "contradictions_resolved": n_contradictions,
+            "bodies_archived_review": n_review_archived,
         }
     except Exception as e:
         fail_run(store.conn, run_id, error_message=str(e))
