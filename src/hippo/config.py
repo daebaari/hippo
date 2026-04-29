@@ -64,6 +64,14 @@ RETRIEVAL_RERANK_TOP_K = 12
 # === Dream tuning ===
 CLUSTER_COSINE_THRESHOLD = 0.7  # min cosine similarity to link two heads in the same cluster
 
+# === Prune phase tuning ===
+# Threshold above which two bodies are considered merge/supersede candidates.
+PRUNE_SIMILARITY_THRESHOLD = 0.85
+# Max neighbors to consider per body during the review judgement.
+PRUNE_NEAREST_K = 5
+# How many oldest-unreviewed active bodies the rolling slice judges per heavy dream.
+PRUNE_ROLLING_SLICE_SIZE = 25
+
 
 # === LLM backend toggle ===
 HIPPO_CONFIG_FILENAME = "hippo-config.toml"

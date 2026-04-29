@@ -27,3 +27,15 @@ def test_edge_relations_list_is_complete() -> None:
     assert "supersedes" in config.EDGE_RELATIONS
     assert "contradicts" in config.EDGE_RELATIONS
     assert "applies_when" in config.EDGE_RELATIONS
+
+
+def test_prune_constants_exist_with_sensible_values():
+    from hippo.config import (
+        PRUNE_NEAREST_K,
+        PRUNE_ROLLING_SLICE_SIZE,
+        PRUNE_SIMILARITY_THRESHOLD,
+    )
+
+    assert 0.5 < PRUNE_SIMILARITY_THRESHOLD <= 1.0
+    assert PRUNE_NEAREST_K >= 1
+    assert PRUNE_ROLLING_SLICE_SIZE >= 1
