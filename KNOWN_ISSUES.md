@@ -68,12 +68,14 @@ manual heavy dreams during work hours unless you can spare ~30 min.
 
 ## Atomize-prompt noise leakage
 
-**Symptom:** occasional "noise atoms" land in the store from session-debug
-turns ("status", "again", "i sent it", etc.) despite the atomize prompt
-explicitly telling the LLM to skip in-the-moment chatter.
-
-**Root cause:** LLM doesn't always follow the skip instruction; some short
-non-durable turns get atomized anyway.
+**Symptom:** an occasional in-the-moment chatter atom may still land in the
+store from session-debug turns despite the explicit `noise: true|false`
+field in the atomize prompt (`src/hippo/dream/prompts/atomize.md`). The
+prompt now requires the model to commit to a noise classification per atom
+with explicit examples on both sides plus a "when uncertain → noise=true"
+tiebreaker, and `_is_noise` in `src/hippo/dream/atomize.py` is permissive
+about the value's type (bool / "true" / 1 all coerce to truthy). This
+mitigates but doesn't eliminate the leak.
 
 **Workaround:** soft-archive obvious noise atoms when spotted:
 
@@ -81,9 +83,22 @@ non-durable turns get atomized anyway.
 bin/memory-archive <head_id> --reason "atomize-noise"
 ```
 
-**Fix:** tighten the atomize prompt with stronger negative examples, OR add a
-post-atomize "dream-noise filter" pass that flags atoms with short bodies +
-no semantic structure. Future improvement.
+**Fix path:** the prune-phase review step
+(`src/hippo/dream/review.py::review_rolling_slice`) eventually re-evaluates
+older atoms against newer ones; redundant noise that survived atomize will
+get caught when a clearly-better neighbor arrives. Future improvement: a
+post-atomize length / structure heuristic as a second-line backstop.
+
+## Review false-positive recovery is manual SQL today
+
+**Symptom:** if the prune-phase review archives a body that you later want
+back, there's no `bin/memory-restore` command. Recovery is `UPDATE bodies
+SET archived = 0, archive_reason = NULL, archived_in_favor_of = NULL WHERE
+body_id = ?` in the project's sqlite store, plus the same on each head
+where `body_id = ?`. The body markdown file is still on disk (we don't
+hard-delete) so the row's `file_path` resolves correctly.
+
+**Fix path:** add a `memory-restore` CLI when this becomes annoying.
 
 ## Lock leak between `acquire_lock` and `start_run`
 
