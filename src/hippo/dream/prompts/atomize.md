@@ -7,11 +7,28 @@ Read the transcript below. Output a JSON array of atom objects. Each atom has th
   "title": "short title (under 60 chars)",
   "body": "full content — can be a single fact, a paragraph of reasoning, or a long write-up. Whatever serves the concept.",
   "scope": "global" | "project:{{project}}",
-  "heads": ["1-2 sentence keyword summary 1", "1-2 sentence keyword summary 2", ...]
+  "heads": ["1-2 sentence keyword summary 1", "1-2 sentence keyword summary 2", ...],
+  "noise": true | false
 }
 
-Rules:
-- ONLY extract genuinely durable facts: rules, decisions, learnings, preferences, important references. Skip in-the-moment chatter, debugging steps that don't generalize, or one-off task acknowledgments.
+Rules for the `noise` field:
+- noise=false means: this atom captures durable knowledge worth recalling later. Examples:
+  - decisions ("we chose Postgres over MySQL because of full-text search")
+  - preferences and constraints ("user prefers responses under 100 words")
+  - project facts ("the auth service runs on port 8081")
+  - reusable patterns ("retry exponential backoff on 5xx, give up after 5 tries")
+  - bug-fix learnings ("worktree pointers can be relative paths, parse both forms")
+  - spec or requirement statements ("memory must remain lean across nightly runs")
+- noise=true means: in-the-moment chatter or session debugging that does NOT generalize. Examples:
+  - terse procedural turns ("status", "again", "i sent it", "next")
+  - acknowledgments ("ok", "thanks", "looks good", "yes do it")
+  - debug-loop chatter ("try again", "doesn't work", "hmm", "wait")
+  - trivial confirmations of a request ("done", "go ahead")
+  - system events ("[Request interrupted]")
+  - re-prompts after errors ("retry", "try with the fix")
+- Tiebreaker: if you are uncertain whether an atom is durable, output noise=true. Default to skipping.
+
+Other rules:
 - Each atom must have at least 1 head and at most 5.
 - Heads must be diverse — they capture different angles of the body, not paraphrases.
 - "scope" = "global" if the atom applies regardless of project (user preferences, role, cross-project insights). Otherwise "project:{{project}}".
