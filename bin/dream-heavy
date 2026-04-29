@@ -7,4 +7,4 @@ while [ -L "$SOURCE" ]; do
   [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
-exec uv run --project "$SCRIPT_DIR/.." --quiet python -m hippo.cli.dream_heavy "$@"
+exec uv run --project "$SCRIPT_DIR/.." --quiet python -m hippo.cli.dream_heavy --strict "$@"
