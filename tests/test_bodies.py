@@ -90,3 +90,21 @@ def test_list_bodies_by_scope_excludes_archived(conn: sqlite3.Connection) -> Non
     globals_active = list_bodies_by_scope(conn, "global")
     ids = {r.body_id for r in globals_active}
     assert ids == {"a"}
+
+
+def test_body_record_includes_last_reviewed_at(temp_memory_dir, sqlite_conn):
+    """BodyRecord exposes last_reviewed_at; defaults to None on insert."""
+    from hippo.storage.bodies import BodyRecord, get_body, insert_body
+    from hippo.storage.migrations import run_migrations
+
+    run_migrations(sqlite_conn)
+    insert_body(
+        sqlite_conn,
+        BodyRecord(
+            body_id="bid-1", file_path="bodies/bid-1.md", title="t",
+            scope="global", source="test",
+        ),
+    )
+    rec = get_body(sqlite_conn, "bid-1")
+    assert rec is not None
+    assert rec.last_reviewed_at is None

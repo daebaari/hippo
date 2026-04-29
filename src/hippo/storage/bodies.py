@@ -23,6 +23,7 @@ class BodyRecord:
     archived_in_favor_of: str | None = None
     created_at: int | None = None
     updated_at: int | None = None
+    last_reviewed_at: int | None = None
 
 
 def insert_body(conn: sqlite3.Connection, record: BodyRecord) -> None:
@@ -90,4 +91,5 @@ def _row_to_record(row: sqlite3.Row) -> BodyRecord:
         source=row["source"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        last_reviewed_at=row["last_reviewed_at"],
     )
