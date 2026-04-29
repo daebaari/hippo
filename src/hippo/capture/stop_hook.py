@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
+import traceback
 from pathlib import Path
 from typing import Protocol
 
@@ -23,6 +25,25 @@ from hippo.daemon.client import DaemonClient
 from hippo.storage.capture import CaptureRecord, enqueue_capture
 from hippo.storage.multi_store import Scope, open_store
 from hippo.storage.turn_embeddings import insert_turn_embedding
+
+
+def _log_path() -> Path:
+    """Override via HIPPO_STOP_LOG (used by tests)."""
+    override = os.environ.get("HIPPO_STOP_LOG")
+    if override:
+        return Path(override)
+    return Path.home() / ".claude" / "debug" / "hippo-stop.log"
+
+
+def _log(msg: str) -> None:
+    """Append a timestamped line to the hippo-stop log. Never raises."""
+    try:
+        p = _log_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a") as f:
+            f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {msg}\n")
+    except Exception:
+        pass  # logging must never block the hook
 
 
 class DaemonClientProto(Protocol):
@@ -92,6 +113,11 @@ def handle_stop(*, stdin_text: str, daemon: DaemonClientProto | None = None) -> 
         user_message = _read_last_user_message(payload.get("transcript_path"))
 
     if not (user_message or assistant_message):
+        _log(
+            f"early-return: empty user+assistant "
+            f"session={payload.get('session_id', '?')} "
+            f"transcript={payload.get('transcript_path', '?')}"
+        )
         return ""
 
     session_id = payload.get("session_id", "unknown")
@@ -129,6 +155,7 @@ def main() -> int:
         handle_stop(stdin_text=sys.stdin.read())
         return 0
     except Exception as e:
+        _log(f"exception: {type(e).__name__}: {e}\n{traceback.format_exc()}")
         sys.stderr.write(f"hippo stop-hook error: {e}\n")
         return 0
 

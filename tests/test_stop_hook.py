@@ -1,9 +1,10 @@
 """Test the Stop hook handler with mock daemon."""
 from __future__ import annotations
 
+import io
 import json
 
-from hippo.capture.stop_hook import handle_stop
+from hippo.capture.stop_hook import handle_stop, main
 from hippo.config import EMBEDDING_DIM
 from hippo.storage.capture import list_unprocessed_captures
 from hippo.storage.multi_store import Scope, open_store
@@ -129,3 +130,51 @@ def test_handle_stop_missing_transcript_falls_back_to_assistant_only(tmp_path, m
     assert captures[0].user_message is None
     assert captures[0].assistant_message == "I responded."
     s.conn.close()
+
+
+def test_log_written_on_empty_messages_early_return(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    log_file = tmp_path / "hippo-stop.log"
+    monkeypatch.setenv("HIPPO_STOP_LOG", str(log_file))
+    payload = json.dumps({
+        "session_id": "sess-empty",
+        "cwd": str(tmp_path),
+        "transcript_path": "/tmp/missing.jsonl",
+    })
+    handle_stop(stdin_text=payload, daemon=FakeDaemon())
+    assert log_file.exists()
+    text = log_file.read_text()
+    assert "early-return" in text
+    assert "sess-empty" in text
+
+
+def test_log_written_on_exception_in_main(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    log_file = tmp_path / "hippo-stop.log"
+    monkeypatch.setenv("HIPPO_STOP_LOG", str(log_file))
+    monkeypatch.setattr("sys.stdin", io.StringIO("not valid json {{"))
+
+    def _no_daemon(*a, **k):
+        raise AssertionError("daemon should not be constructed; main should fail in JSON parse")
+
+    monkeypatch.setattr("hippo.capture.stop_hook.DaemonClient", _no_daemon)
+    rc = main()
+    assert rc == 0  # hook must never block the session
+    assert log_file.exists()
+    text = log_file.read_text()
+    assert "exception" in text
+    assert "JSONDecodeError" in text
+
+
+def test_log_not_written_on_successful_capture(tmp_path, monkeypatch):
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+    log_file = tmp_path / "hippo-stop.log"
+    monkeypatch.setenv("HIPPO_STOP_LOG", str(log_file))
+    payload = json.dumps({
+        "session_id": "sess-ok",
+        "user_message": "hi",
+        "assistant_message": "hello",
+        "cwd": str(tmp_path),
+    })
+    handle_stop(stdin_text=payload, daemon=FakeDaemon())
+    assert not log_file.exists()
