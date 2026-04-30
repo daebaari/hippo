@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from hippo.dream.progress import format_eta, rolling_rate
+from hippo.dream.progress import ProgressReporter, format_eta, rolling_rate
 
 
 def test_rolling_rate_simple_case():
@@ -37,3 +37,64 @@ def test_format_eta_zero_rate():
 
 def test_format_eta_capped_at_99m():
     assert format_eta(remaining=10000, rate=1.0) == ">99m"
+
+
+def test_progress_reporter_throttles_by_ticks():
+    emits: list[tuple[int, int]] = []
+
+    def emit(done: int, total: int) -> None:
+        emits.append((done, total))
+
+    clock = [0.0]
+    reporter = ProgressReporter(
+        emit=emit,
+        clock=lambda: clock[0],
+        total=500,
+    )
+    for i in range(1, 501):
+        reporter.tick(i)
+    reporter.finish()
+
+    # 500 ticks, throttle every 100, so 5 emits during ticks + 1 finish
+    assert len(emits) == 6
+    assert emits[-1] == (500, 500)
+
+
+def test_progress_reporter_throttles_by_seconds():
+    emits: list[tuple[int, int]] = []
+
+    def emit(done: int, total: int) -> None:
+        emits.append((done, total))
+
+    clock = [0.0]
+    reporter = ProgressReporter(
+        emit=emit,
+        clock=lambda: clock[0],
+        total=10,
+    )
+    # 10 ticks below tick-threshold; advance clock past PROGRESS_THROTTLE_SECONDS
+    # between each tick to force time-based emits.
+    for i in range(1, 11):
+        clock[0] += 5.5
+        reporter.tick(i)
+    reporter.finish()
+
+    # 10 time-based emits + 1 finish (finish always emits final state)
+    assert len(emits) == 11
+
+
+def test_progress_reporter_finish_always_emits_final_state():
+    emits: list[tuple[int, int]] = []
+
+    def emit(done: int, total: int) -> None:
+        emits.append((done, total))
+
+    reporter = ProgressReporter(
+        emit=emit, clock=lambda: 0.0, total=3,
+    )
+    reporter.tick(1)
+    reporter.tick(2)
+    reporter.tick(3)
+    reporter.finish()
+
+    assert emits[-1] == (3, 3)

@@ -32,3 +32,40 @@ def format_eta(*, remaining: int, rate: float) -> str:
     if minutes > 99:
         return ">99m"
     return f"{minutes}m"
+
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+
+@dataclass
+class ProgressReporter:
+    """Throttled progress callback.
+
+    Calls `emit(done, total)` at most once per PROGRESS_THROTTLE_SECONDS or every
+    PROGRESS_THROTTLE_TICKS calls to tick(). Always emits exactly once on finish().
+    """
+
+    emit: Callable[[int, int], None]
+    clock: Callable[[], float]
+    total: int
+    _ticks_since_emit: int = 0
+    _last_emit_time: float = 0.0
+    _last_done: int = 0
+    _started: bool = False
+
+    def tick(self, done: int) -> None:
+        if not self._started:
+            self._started = True
+        self._last_done = done
+        self._ticks_since_emit += 1
+        now = self.clock()
+        time_due = now - self._last_emit_time >= PROGRESS_THROTTLE_SECONDS
+        ticks_due = self._ticks_since_emit >= PROGRESS_THROTTLE_TICKS
+        if time_due or ticks_due:
+            self.emit(done, self.total)
+            self._last_emit_time = now
+            self._ticks_since_emit = 0
+
+    def finish(self) -> None:
+        self.emit(self._last_done, self.total)
