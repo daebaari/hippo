@@ -75,3 +75,14 @@ def test_complete_run_persists_bodies_archived_review(sqlite_conn):
     runs = get_recent_runs(sqlite_conn, limit=1)
     assert len(runs) == 1
     assert runs[0].bodies_archived_review == 4
+
+
+def test_dream_run_record_exposes_progress_fields(conn):
+    run_id = start_run(conn, "heavy")
+    runs = get_recent_runs(conn, limit=1)
+    r = runs[0]
+    assert r.current_phase is None
+    assert r.phase_done is None
+    assert r.phase_total is None
+    assert r.phase_started_at is None
+    assert r.last_progress_at is None

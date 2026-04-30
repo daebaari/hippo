@@ -23,6 +23,11 @@ class DreamRunRecord:
     contradictions_resolved: int
     bodies_archived_review: int
     error_message: str | None
+    current_phase: str | None
+    phase_done: int | None
+    phase_total: int | None
+    phase_started_at: int | None
+    last_progress_at: int | None
 
 
 def start_run(conn: sqlite3.Connection, dream_type: DreamType) -> int:
@@ -89,6 +94,11 @@ def get_recent_runs(conn: sqlite3.Connection, limit: int) -> list[DreamRunRecord
             contradictions_resolved=int(r["contradictions_resolved"] or 0),
             bodies_archived_review=int(r["bodies_archived_review"] or 0),
             error_message=r["error_message"],
+            current_phase=r["current_phase"],
+            phase_done=r["phase_done"],
+            phase_total=r["phase_total"],
+            phase_started_at=r["phase_started_at"],
+            last_progress_at=r["last_progress_at"],
         )
         for r in rows
     ]
