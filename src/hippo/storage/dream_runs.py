@@ -90,6 +90,16 @@ def start_phase(
     conn.commit()
 
 
+def update_progress(conn: sqlite3.Connection, run_id: int, *, done: int) -> None:
+    """Update phase_done and last_progress_at for the given run."""
+    conn.execute(
+        "UPDATE dream_runs SET phase_done = ?, last_progress_at = ? "
+        "WHERE run_id = ?",
+        (done, int(time.time()), run_id),
+    )
+    conn.commit()
+
+
 def get_recent_runs(conn: sqlite3.Connection, limit: int) -> list[DreamRunRecord]:
     rows = conn.execute(
         "SELECT * FROM dream_runs ORDER BY started_at DESC, run_id DESC LIMIT ?",

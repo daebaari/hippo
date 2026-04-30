@@ -101,3 +101,18 @@ def test_start_phase_sets_phase_columns_and_resets_done(conn):
     assert r.phase_total == 12
     assert r.phase_started_at is not None
     assert r.last_progress_at is not None
+
+
+def test_update_progress_writes_done_and_timestamp(conn):
+    from hippo.storage.dream_runs import start_phase, update_progress
+
+    run_id = start_run(conn, "heavy")
+    start_phase(conn, run_id, phase="edge_proposal", total=100)
+
+    update_progress(conn, run_id, done=42)
+
+    runs = get_recent_runs(conn, limit=1)
+    r = runs[0]
+    assert r.current_phase == "edge_proposal"
+    assert r.phase_done == 42
+    assert r.last_progress_at is not None
