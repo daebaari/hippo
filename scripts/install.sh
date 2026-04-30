@@ -42,6 +42,25 @@ echo "==> Installing hooks into ~/.claude/settings.json..."
 "$REPO/scripts/install-hooks.sh"
 echo
 
+# --- Step 5.5: bin/ on PATH (so `hippo dream`, `hippo status`, etc. work) ---
+echo "==> Adding $REPO/bin to PATH"
+PATH_LINE="export PATH=\"$REPO/bin:\$PATH\""
+case "${SHELL:-/bin/zsh}" in
+  *zsh)  RC="$HOME/.zshrc" ;;
+  *bash) RC="$HOME/.bashrc" ;;
+  *)     RC="" ;;
+esac
+if [ -z "$RC" ]; then
+  echo "    Unrecognized shell ($SHELL). Add this line to your shell rc manually:"
+  echo "      $PATH_LINE"
+elif [ -f "$RC" ] && grep -Fq "$REPO/bin" "$RC"; then
+  echo "    Already present in $RC — skipping."
+else
+  printf '\n# hippo memory CLI\n%s\n' "$PATH_LINE" >> "$RC"
+  echo "    Appended to $RC. Run \`source $RC\` or open a new shell to pick it up."
+fi
+echo
+
 # --- Step 6: bootstrap migration prompt ---
 echo "==> Bootstrap migration"
 read -r -p "Run bootstrap migration over an existing memory dir now? [y/N] " ans
