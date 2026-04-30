@@ -3,7 +3,14 @@ from __future__ import annotations
 
 import pytest
 
-from hippo.dream.progress import ProgressReporter, format_eta, rolling_rate
+from hippo.dream.progress import (
+    ProgressReporter,
+    format_eta,
+    format_phase_complete_line,
+    format_phase_start_line,
+    format_progress_line,
+    rolling_rate,
+)
 
 
 def test_rolling_rate_simple_case():
@@ -98,3 +105,33 @@ def test_progress_reporter_finish_always_emits_final_state():
     reporter.finish()
 
     assert emits[-1] == (3, 3)
+
+
+def test_format_progress_line_running_phase():
+    line = format_progress_line(
+        phase="edge_proposal",
+        done=87,
+        total=5765,
+        elapsed_s=5,
+        rate=9.0,
+        eta="10m",
+    )
+    assert "phase=edge_proposal" in line
+    assert "done=87/5765" in line
+    assert "(1.5%)" in line
+    assert "rate=9.0/s" in line
+    assert "eta=10m" in line
+
+
+def test_format_phase_start_line():
+    line = format_phase_start_line(phase="atomize", total=12)
+    assert "phase=atomize" in line
+    assert "total=12" in line
+
+
+def test_format_phase_complete_line():
+    line = format_phase_complete_line(phase="review", total=16, elapsed_s=27)
+    assert "phase=review" in line
+    assert "done=16/16" in line
+    assert "(100%)" in line
+    assert "elapsed=27s" in line

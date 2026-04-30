@@ -69,3 +69,34 @@ class ProgressReporter:
 
     def finish(self) -> None:
         self.emit(self._last_done, self.total)
+
+
+PHASE_COL_WIDTH = 16
+
+
+def _phase_col(phase: str) -> str:
+    return f"phase={phase:<{PHASE_COL_WIDTH}}"
+
+
+def format_phase_start_line(*, phase: str, total: int) -> str:
+    return f"{_phase_col(phase)} total={total}"
+
+
+def format_phase_complete_line(*, phase: str, total: int, elapsed_s: int) -> str:
+    return f"{_phase_col(phase)} done={total}/{total} (100%) elapsed={elapsed_s}s"
+
+
+def format_progress_line(
+    *,
+    phase: str,
+    done: int,
+    total: int,
+    elapsed_s: int,
+    rate: float,
+    eta: str,
+) -> str:
+    pct = (100 * done / total) if total > 0 else 0.0
+    return (
+        f"{_phase_col(phase)} done={done}/{total} ({pct:.1f}%) "
+        f"rate={rate:.1f}/s eta={eta}"
+    )
