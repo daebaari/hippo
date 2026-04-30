@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# hippo: subcommand dispatcher for memory CLIs.
+#
+# Usage:
+#   hippo dream    [args...]   # heavy dream consolidation
+#   hippo status   [args...]   # show most recent dream run
+#   hippo get      [args...]   # fetch body markdown by head_id
+#   hippo search   [args...]   # search memory
+#   hippo archive  [args...]   # manually archive a head
+#   hippo stats    [args...]   # corpus stats
+
+set -e
+
+# Resolve symlinks so we always run inside the real repo's venv.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+REPO_DIR="$SCRIPT_DIR/.."
+
+SUBCMD="${1:-}"
+shift || true
+
+case "$SUBCMD" in
+  dream)   MODULE="hippo.cli.dream_heavy" ;;
+  status)  MODULE="hippo.cli.dream_status" ;;
+  get)     MODULE="hippo.cli.get" ;;
+  search)  MODULE="hippo.cli.search" ;;
+  archive) MODULE="hippo.cli.archive" ;;
+  stats)   MODULE="hippo.cli.stats" ;;
+  ""|-h|--help|help)
+    cat <<EOF
+hippo — memory CLI dispatcher
+
+Usage:  hippo <command> [args...]
+
+Commands:
+  dream     Run a heavy dream to consolidate captures into memory.
+  status    Show the most recent dream run (running or completed).
+  get       Fetch a memory body by head_id.
+  search    Search memory by text query.
+  archive   Manually archive a head.
+  stats     Print corpus stats.
+
+Each subcommand accepts -h/--help for its own options.
+EOF
+    exit 0
+    ;;
+  *)
+    echo "hippo: unknown subcommand '$SUBCMD'" >&2
+    echo "Run 'hippo --help' for usage." >&2
+    exit 2
+    ;;
+esac
+
+exec uv run --project "$REPO_DIR" --quiet python -m "$MODULE" "$@"
