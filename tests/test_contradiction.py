@@ -113,8 +113,8 @@ def test_resolve_contradictions_archives_loser(tmp_path, monkeypatch):
     assert loser_head is not None
     assert loser_head.archived
 
-    # Regression: assert thinking_level="minimal" was passed
-    assert all(level == "minimal" for level in llm.thinking_levels)
+    # Regression: assert thinking_level="medium" was passed
+    assert all(level == "medium" for level in llm.thinking_levels)
     assert llm.thinking_levels  # at least one call
 
     store.conn.close()

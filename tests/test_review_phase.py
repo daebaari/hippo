@@ -69,7 +69,7 @@ def test_judge_pair_returns_merge_with_keeper(tmp_path, monkeypatch):
     )
     assert decision == "merge"
     assert keeper == "bid-a"
-    assert llm.thinking_levels == ["minimal"]
+    assert llm.thinking_levels == ["medium"]
     store.conn.close()
 
 
