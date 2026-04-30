@@ -86,3 +86,18 @@ def test_dream_run_record_exposes_progress_fields(conn):
     assert r.phase_total is None
     assert r.phase_started_at is None
     assert r.last_progress_at is None
+
+
+def test_start_phase_sets_phase_columns_and_resets_done(conn):
+    from hippo.storage.dream_runs import start_phase
+
+    run_id = start_run(conn, "heavy")
+    start_phase(conn, run_id, phase="atomize", total=12)
+
+    runs = get_recent_runs(conn, limit=1)
+    r = runs[0]
+    assert r.current_phase == "atomize"
+    assert r.phase_done == 0
+    assert r.phase_total == 12
+    assert r.phase_started_at is not None
+    assert r.last_progress_at is not None

@@ -76,6 +76,20 @@ def fail_run(conn: sqlite3.Connection, run_id: int, *, error_message: str) -> No
     conn.commit()
 
 
+def start_phase(
+    conn: sqlite3.Connection, run_id: int, *, phase: str, total: int
+) -> None:
+    """Record the start of a new phase. Resets phase_done to 0."""
+    now = int(time.time())
+    conn.execute(
+        "UPDATE dream_runs SET current_phase = ?, phase_done = 0, "
+        "phase_total = ?, phase_started_at = ?, last_progress_at = ? "
+        "WHERE run_id = ?",
+        (phase, total, now, now, run_id),
+    )
+    conn.commit()
+
+
 def get_recent_runs(conn: sqlite3.Connection, limit: int) -> list[DreamRunRecord]:
     rows = conn.execute(
         "SELECT * FROM dream_runs ORDER BY started_at DESC, run_id DESC LIMIT ?",
