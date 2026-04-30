@@ -23,10 +23,15 @@ scripts/install.sh
 # the installer is idempotent and offers an optional bootstrap migration step
 # at the end. Open a new Claude Code session and memory will be live.
 
+# add bin/ to PATH for git-style subcommands (one-time):
+echo 'export PATH="$HOME/code/hippo/bin:$PATH"' >> ~/.zshrc
+
 # day-to-day:
-uv run memory-stats                       # see body / head / edge counts
-uv run memory-stats --project kaleon      # per-project view
-bin/dream-heavy --force                   # force a heavy dream now
+hippo stats                               # body / head / edge counts
+hippo stats --project kaleon              # per-project view
+hippo dream --force                       # force a heavy dream now
+hippo status --scope kaleon               # peek at a running or last-completed dream
+hippo get <head_id>                       # fetch a memory's body markdown
 scripts/uninstall.sh                      # remove hooks + launchd, keep data
 
 # run the test suite:
@@ -82,6 +87,14 @@ The `/hippo-dream` slash command (installed by `install-hooks.sh`,
 namespaced to coexist with any vanilla `/dream`) runs `bin/dream-heavy
 --force` interactively. The model loads in ~30-60s, then a typical run
 takes a few minutes per scope depending on capture volume.
+
+Long runs are observable while in progress: `heavy.py` writes per-phase
+progress (current phase, items done / total, last update timestamp) to
+the active `dream_runs` row and emits matching key=value lines on
+stderr. `hippo status` (or `bin/dream-status`) reads the row and prints
+a one-line summary, including a rolling-rate ETA inside `edge_proposal`
+— the only N²-bound phase. See `src/hippo/dream/progress.py` for the
+throttle and ETA helpers.
 
 ### Bootstrap migration
 
@@ -155,6 +168,7 @@ src/hippo/
     edge_proposal.py     # within-cluster LLM-typed edges
     contradiction.py     # LLM-confirmed contradiction resolution
     cleanup.py           # mark captures processed + drop turn embeddings
+    progress.py          # throttled stderr/DB progress reporter + ETA helpers
     heavy.py             # heavy dream orchestrator
     prompts/             # markdown templates for each LLM-driven phase
   cli/
@@ -163,8 +177,10 @@ src/hippo/
     search.py            # memory-search (ad-hoc retrieval)
     archive.py           # memory-archive (mark heads archived)
     dream_heavy.py       # bin/dream-heavy entry point (loads Qwen, runs phases)
+    dream_status.py      # bin/dream-status entry point (read-only)
     dream_bootstrap.py   # bin/dream-bootstrap entry point (legacy migration)
 bin/
+  hippo                  # git-style subcommand dispatcher (dream, status, get, search, archive, stats)
   daemon                 # daemon entrypoint
   memory-get             # CLI shim
   memory-search          # CLI shim
@@ -173,6 +189,7 @@ bin/
   stop-capture           # Stop hook entrypoint
   precompact-light-dream # PreCompact hook entrypoint
   dream-heavy            # heavy dream entrypoint (AC-gated)
+  dream-status           # read-only status of the most recent dream
   dream-bootstrap        # one-shot legacy-files-to-atoms migration
 commands/
   dream.md               # /hippo-dream slash command
