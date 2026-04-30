@@ -127,6 +127,41 @@ def test_propose_edges_skips_dissimilar_heads(store: object) -> None:
     assert count == 0
 
 
+def test_propose_edges_invokes_progress_cb_per_pair(store: object) -> None:
+    """progress_cb is called once per cluster pair, with (done, total)."""
+    # Insert three heads with identical embeddings so they form one cluster (size 3 → 3 pairs)
+    embedding = _make_embedding(1.0, 0.0)
+    for i in range(3):
+        body_id = f"body-cb-{i}"
+        insert_body(
+            store.conn,  # type: ignore[attr-defined]
+            BodyRecord(
+                body_id=body_id,
+                file_path=f"bodies/{body_id}.md",
+                title=f"t{i}",
+                scope="global",
+                source="test",
+            ),
+        )
+        head_id = f"head-cb-{i}"
+        insert_head(
+            store.conn,  # type: ignore[attr-defined]
+            HeadRecord(head_id=head_id, body_id=body_id, summary=f"summary {i}"),
+        )
+        insert_head_embedding(store.conn, head_id, embedding)  # type: ignore[attr-defined]
+
+    progress_calls: list[tuple[int, int]] = []
+    propose_edges(
+        store=store,  # type: ignore[arg-type]
+        llm=StubLLM(),
+        progress_cb=lambda done, total: progress_calls.append((done, total)),
+    )
+
+    # 3 pairs, each yields exactly one progress call
+    assert len(progress_calls) == 3
+    assert progress_calls[-1] == (3, 3)
+
+
 def test_propose_edges_skips_existing_edges(store: object) -> None:
     """If an edge already exists between a pair, don't call LLM or insert again."""
     insert_body(
