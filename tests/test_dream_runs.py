@@ -116,3 +116,25 @@ def test_update_progress_writes_done_and_timestamp(conn):
     assert r.current_phase == "edge_proposal"
     assert r.phase_done == 42
     assert r.last_progress_at is not None
+
+
+def test_get_running_run_returns_in_progress_only(conn):
+    from hippo.storage.dream_runs import get_running_run
+
+    completed = start_run(conn, "heavy")
+    complete_run(conn, completed)
+    running_id = start_run(conn, "heavy")
+
+    got = get_running_run(conn)
+    assert got is not None
+    assert got.run_id == running_id
+    assert got.status == "running"
+
+
+def test_get_running_run_returns_none_when_no_running_run(conn):
+    from hippo.storage.dream_runs import get_running_run
+
+    completed = start_run(conn, "heavy")
+    complete_run(conn, completed)
+
+    assert get_running_run(conn) is None
