@@ -120,6 +120,34 @@ def find_active_bodies_by_run_source(
     return [_row_to_record(r) for r in rows]
 
 
+def count_eligible_for_multi_head(
+    conn: sqlite3.Connection, *, target_total_heads: int = 3
+) -> int:
+    """Count bodies that multi_head expansion will process this run.
+
+    Mirrors the eligibility filter in expand_heads_for_eligible_bodies:
+    archived=0, < target_total_heads active heads, and at least one head
+    with retrieval_count > 0. Used solely for the progress denominator.
+    """
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS c FROM (
+            SELECT b.body_id
+            FROM bodies b
+            LEFT JOIN heads h ON h.body_id = b.body_id AND h.archived = 0
+            WHERE b.archived = 0
+            GROUP BY b.body_id
+            HAVING COUNT(h.head_id) < ?
+              AND (
+                  SELECT MAX(retrieval_count) FROM heads WHERE body_id = b.body_id
+              ) > 0
+        )
+        """,
+        (target_total_heads,),
+    ).fetchone()
+    return int(row["c"]) if row else 0
+
+
 def find_merge_candidates(
     conn: sqlite3.Connection,
     *,
