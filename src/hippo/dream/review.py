@@ -7,6 +7,7 @@ soft-archives the loser. Modes A (factually superseded) and D
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from hippo.dream.atomize import _strip_fences
 from hippo.dream.prompts import render
@@ -114,7 +115,13 @@ def _review_body_against_neighbors(
     return archived
 
 
-def review_new_atoms(*, store: Store, llm: LLMProto, run_id: int) -> int:
+def review_new_atoms(
+    *,
+    store: Store,
+    llm: LLMProto,
+    run_id: int,
+    progress_cb: "Callable[[int, int], None] | None" = None,
+) -> int:
     """Pass 1 — review each body inserted by this heavy dream run.
 
     Returns count of bodies archived.
@@ -123,17 +130,22 @@ def review_new_atoms(*, store: Store, llm: LLMProto, run_id: int) -> int:
 
     new_bodies = find_active_bodies_by_run_source(store.conn, run_id=run_id)
     n_archived = 0
-    for body in new_bodies:
-        # Re-check active state in case a previous iteration archived this body
-        # (it could have lost a head-to-head similarity contest with another new body).
+    for idx, body in enumerate(new_bodies, start=1):
         n_archived += _review_body_against_neighbors(
             store=store, llm=llm, body_id=body.body_id,
         )
+        if progress_cb is not None:
+            progress_cb(idx, len(new_bodies))
     return n_archived
 
 
 def review_rolling_slice(
-    *, store: Store, scope: str, llm: LLMProto, slice_size: int
+    *,
+    store: Store,
+    scope: str,
+    llm: LLMProto,
+    slice_size: int,
+    progress_cb: "Callable[[int, int], None] | None" = None,
 ) -> int:
     """Pass 2 — review the K oldest-unreviewed active bodies in scope.
 
@@ -146,8 +158,10 @@ def review_rolling_slice(
         store.conn, scope=scope, limit=slice_size,
     )
     n_archived = 0
-    for body in slice_bodies:
+    for idx, body in enumerate(slice_bodies, start=1):
         n_archived += _review_body_against_neighbors(
             store=store, llm=llm, body_id=body.body_id,
         )
+        if progress_cb is not None:
+            progress_cb(idx, len(slice_bodies))
     return n_archived

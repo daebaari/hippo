@@ -3,6 +3,7 @@ deserve more search-affordances. LLM proposes diverse new heads."""
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Protocol
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ def expand_heads_for_eligible_bodies(
     llm: LLMProto,
     daemon: DaemonProto,
     target_total_heads: int = 3,
+    progress_cb: "Callable[[int, int], None] | None" = None,
 ) -> int:
     """For bodies with retrieval_count > 0 and < target_total_heads heads,
     generate additional diverse heads. Returns count of new heads inserted."""
@@ -43,12 +45,15 @@ def expand_heads_for_eligible_bodies(
         (target_total_heads,),
     ).fetchall()
 
+    total = len(rows)
     n_new = 0
-    for r in rows:
+    for idx, r in enumerate(rows, start=1):
         existing = list_heads_for_body(store.conn, r["body_id"])
         try:
             body = read_body_file(store.memory_dir / r["file_path"])
         except FileNotFoundError:
+            if progress_cb is not None:
+                progress_cb(idx, total)
             continue
         n_to_add = target_total_heads - len(existing)
         prompt = render(
@@ -66,11 +71,15 @@ def expand_heads_for_eligible_bodies(
         try:
             new_summaries = json.loads(_strip_fences(raw))
         except json.JSONDecodeError:
+            if progress_cb is not None:
+                progress_cb(idx, total)
             continue
         new_summaries = [
             s for s in new_summaries if isinstance(s, str) and s.strip()
         ][:n_to_add]
         if not new_summaries:
+            if progress_cb is not None:
+                progress_cb(idx, total)
             continue
         vecs = daemon.embed(new_summaries)
         for summary, vec in zip(new_summaries, vecs, strict=True):
@@ -80,4 +89,6 @@ def expand_heads_for_eligible_bodies(
             )
             insert_head_embedding(store.conn, head_id, vec)
             n_new += 1
+        if progress_cb is not None:
+            progress_cb(idx, total)
     return n_new

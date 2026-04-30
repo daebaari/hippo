@@ -172,3 +172,34 @@ def test_heavy_dream_runs_review_phase_and_records_counter(tmp_path, monkeypatch
             assert review_idx < later_idx, f"review must precede {label}"
 
     s.conn.close()
+
+
+def test_heavy_dream_writes_phase_progress_rows(tmp_path, monkeypatch):
+    """At completion, dream_runs has current_phase set to the last-touched phase."""
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+
+    s = open_store(Scope.global_())
+    enqueue_capture(
+        s.conn,
+        CaptureRecord(
+            session_id="sess-A",
+            user_message="we use postgres",
+            assistant_message="ok",
+        ),
+    )
+    s.conn.close()
+
+    run_heavy_dream_all_scopes(
+        scopes=[Scope.global_()], llm=FakeLLM(), daemon=FakeDaemon(),
+    )
+
+    s2 = open_store(Scope.global_())
+    row = s2.conn.execute(
+        "SELECT current_phase, status FROM dream_runs ORDER BY run_id DESC LIMIT 1"
+    ).fetchone()
+    s2.conn.close()
+    assert row["status"] == "completed"
+    # At least one phase ran, leaving current_phase non-NULL.
+    assert row["current_phase"] in {
+        "atomize", "review", "multi_head", "edge_proposal", "contradiction", "cleanup",
+    }

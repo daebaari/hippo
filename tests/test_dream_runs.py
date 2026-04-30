@@ -75,3 +75,66 @@ def test_complete_run_persists_bodies_archived_review(sqlite_conn):
     runs = get_recent_runs(sqlite_conn, limit=1)
     assert len(runs) == 1
     assert runs[0].bodies_archived_review == 4
+
+
+def test_dream_run_record_exposes_progress_fields(conn):
+    run_id = start_run(conn, "heavy")
+    runs = get_recent_runs(conn, limit=1)
+    r = runs[0]
+    assert r.current_phase is None
+    assert r.phase_done is None
+    assert r.phase_total is None
+    assert r.phase_started_at is None
+    assert r.last_progress_at is None
+
+
+def test_start_phase_sets_phase_columns_and_resets_done(conn):
+    from hippo.storage.dream_runs import start_phase
+
+    run_id = start_run(conn, "heavy")
+    start_phase(conn, run_id, phase="atomize", total=12)
+
+    runs = get_recent_runs(conn, limit=1)
+    r = runs[0]
+    assert r.current_phase == "atomize"
+    assert r.phase_done == 0
+    assert r.phase_total == 12
+    assert r.phase_started_at is not None
+    assert r.last_progress_at is not None
+
+
+def test_update_progress_writes_done_and_timestamp(conn):
+    from hippo.storage.dream_runs import start_phase, update_progress
+
+    run_id = start_run(conn, "heavy")
+    start_phase(conn, run_id, phase="edge_proposal", total=100)
+
+    update_progress(conn, run_id, done=42)
+
+    runs = get_recent_runs(conn, limit=1)
+    r = runs[0]
+    assert r.current_phase == "edge_proposal"
+    assert r.phase_done == 42
+    assert r.last_progress_at is not None
+
+
+def test_get_running_run_returns_in_progress_only(conn):
+    from hippo.storage.dream_runs import get_running_run
+
+    completed = start_run(conn, "heavy")
+    complete_run(conn, completed)
+    running_id = start_run(conn, "heavy")
+
+    got = get_running_run(conn)
+    assert got is not None
+    assert got.run_id == running_id
+    assert got.status == "running"
+
+
+def test_get_running_run_returns_none_when_no_running_run(conn):
+    from hippo.storage.dream_runs import get_running_run
+
+    completed = start_run(conn, "heavy")
+    complete_run(conn, completed)
+
+    assert get_running_run(conn) is None

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 
 from hippo.dream.atomize import _strip_fences
 from hippo.dream.cluster import cluster_active_heads
@@ -16,16 +17,26 @@ from hippo.storage.multi_store import Store
 VALID_RELATIONS = {"causes", "supersedes", "contradicts", "applies_when", "related"}
 
 
-def propose_edges(*, store: Store, llm: LLMProto) -> int:
+def propose_edges(
+    *,
+    store: Store,
+    llm: LLMProto,
+    progress_cb: "Callable[[int, int], None] | None" = None,
+) -> int:
     clusters = cluster_active_heads(store.conn)
+    total_pairs = sum(len(c) * (len(c) - 1) // 2 for c in clusters)
     n_inserted = 0
+    pair_idx = 0
     for cluster in clusters:
         for i in range(len(cluster)):
             for j in range(i + 1, len(cluster)):
+                pair_idx += 1
                 a_id, b_id = cluster[i], cluster[j]
                 a = get_head(store.conn, a_id)
                 b = get_head(store.conn, b_id)
                 if a is None or b is None:
+                    if progress_cb is not None:
+                        progress_cb(pair_idx, total_pairs)
                     continue
                 # Skip if any directed edge between them already exists
                 existing = store.conn.execute(
@@ -35,6 +46,8 @@ def propose_edges(*, store: Store, llm: LLMProto) -> int:
                     (a_id, b_id, b_id, a_id),
                 ).fetchone()
                 if existing is not None:
+                    if progress_cb is not None:
+                        progress_cb(pair_idx, total_pairs)
                     continue
 
                 prompt = render("edge_typing", head_a=a.summary, head_b=b.summary)
@@ -47,9 +60,13 @@ def propose_edges(*, store: Store, llm: LLMProto) -> int:
                 try:
                     obj = json.loads(_strip_fences(raw))
                 except json.JSONDecodeError:
+                    if progress_cb is not None:
+                        progress_cb(pair_idx, total_pairs)
                     continue
                 relation = obj.get("relation")
                 if relation not in VALID_RELATIONS:
+                    if progress_cb is not None:
+                        progress_cb(pair_idx, total_pairs)
                     continue
                 weight = float(obj.get("weight", 1.0))
                 try:
@@ -59,5 +76,7 @@ def propose_edges(*, store: Store, llm: LLMProto) -> int:
                     )
                     n_inserted += 1
                 except (sqlite3.IntegrityError, ValueError):
-                    continue
+                    pass
+                if progress_cb is not None:
+                    progress_cb(pair_idx, total_pairs)
     return n_inserted
