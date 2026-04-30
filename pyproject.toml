@@ -17,6 +17,7 @@ memory-stats   = "hippo.cli.stats:main"
 memory-get     = "hippo.cli.get:main"
 memory-search  = "hippo.cli.search:main"
 memory-archive = "hippo.cli.archive:main"
+dream-status   = "hippo.cli.dream_status:main"
 
 [project.optional-dependencies]
 gemini = [
