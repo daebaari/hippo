@@ -56,7 +56,7 @@ def resolve_contradictions(*, store: Store, llm: LLMProto) -> int:
             [{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=400,
-            thinking_level="minimal",
+            thinking_level="medium",
         )
         try:
             obj = json.loads(_strip_fences(raw))
