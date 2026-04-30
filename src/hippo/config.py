@@ -55,6 +55,12 @@ EDGE_BOOST: dict[str, float] = {
 # === Lock semantics ===
 STALE_LOCK_AGE_SECONDS = 3600  # 1 hour
 
+# A dream_runs row in status='running' is treated as orphaned if its most recent
+# timestamp (started_at or last_progress_at) is older than this. The dream's
+# progress reporter ticks at most every PROGRESS_THROTTLE_SECONDS (5s by
+# default), so 5 minutes is a generous slack for slow LLM calls and clock skew.
+STALE_RUN_AGE_SECONDS = 300
+
 # === Retrieval tuning ===
 RETRIEVAL_VECTOR_TOP_K_PER_SCOPE = 25
 RETRIEVAL_HOP_LIMIT_PER_SEED = 5

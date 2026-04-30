@@ -138,3 +138,69 @@ def test_get_running_run_returns_none_when_no_running_run(conn):
     complete_run(conn, completed)
 
     assert get_running_run(conn) is None
+
+
+def test_get_running_run_ignores_stale_running_row(conn):
+    """A 'running' row whose timestamps are older than STALE_RUN_AGE_SECONDS
+    is treated as orphaned — get_running_run returns None."""
+    from hippo.config import STALE_RUN_AGE_SECONDS
+    from hippo.storage.dream_runs import get_running_run
+
+    run_id = start_run(conn, "heavy")
+    # Backdate started_at and last_progress_at past the threshold.
+    stale_ts = int(__import__("time").time()) - STALE_RUN_AGE_SECONDS - 60
+    conn.execute(
+        "UPDATE dream_runs SET started_at = ?, last_progress_at = ? WHERE run_id = ?",
+        (stale_ts, stale_ts, run_id),
+    )
+    conn.commit()
+
+    assert get_running_run(conn) is None
+
+
+def test_get_running_run_returns_row_with_recent_progress(conn):
+    """A row whose last_progress_at is recent is returned even if started_at
+    is old (long-running dream)."""
+    from hippo.config import STALE_RUN_AGE_SECONDS
+    from hippo.storage.dream_runs import get_running_run
+
+    run_id = start_run(conn, "heavy")
+    old_started = int(__import__("time").time()) - STALE_RUN_AGE_SECONDS - 600
+    recent_progress = int(__import__("time").time())
+    conn.execute(
+        "UPDATE dream_runs SET started_at = ?, last_progress_at = ? WHERE run_id = ?",
+        (old_started, recent_progress, run_id),
+    )
+    conn.commit()
+
+    got = get_running_run(conn)
+    assert got is not None
+    assert got.run_id == run_id
+
+
+def test_mark_orphan_runs_failed_flips_running_rows(conn):
+    from hippo.storage.dream_runs import mark_orphan_runs_failed
+
+    a = start_run(conn, "heavy")
+    b = start_run(conn, "heavy")
+    completed = start_run(conn, "heavy")
+    complete_run(conn, completed)
+
+    n = mark_orphan_runs_failed(conn)
+    assert n == 2
+
+    runs = get_recent_runs(conn, limit=10)
+    by_id = {r.run_id: r for r in runs}
+    assert by_id[a].status == "failed"
+    assert by_id[a].error_message and "abandoned" in by_id[a].error_message
+    assert by_id[b].status == "failed"
+    assert by_id[completed].status == "completed"
+
+
+def test_mark_orphan_runs_failed_no_running_returns_zero(conn):
+    from hippo.storage.dream_runs import mark_orphan_runs_failed
+
+    rid = start_run(conn, "heavy")
+    complete_run(conn, rid)
+
+    assert mark_orphan_runs_failed(conn) == 0

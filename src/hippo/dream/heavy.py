@@ -24,7 +24,14 @@ from hippo.dream.progress import (
 from hippo.dream.review import review_new_atoms, review_rolling_slice
 from hippo.lock import LockHeldError, acquire_lock, release_lock
 from hippo.models.llm import LLMProto
-from hippo.storage.dream_runs import complete_run, fail_run, start_phase, start_run, update_progress
+from hippo.storage.dream_runs import (
+    complete_run,
+    fail_run,
+    mark_orphan_runs_failed,
+    start_phase,
+    start_run,
+    update_progress,
+)
 from hippo.storage.multi_store import Scope, open_store
 
 
@@ -105,6 +112,11 @@ def run_heavy_dream_for_scope(
     except LockHeldError:
         store.conn.close()
         return {"skipped_locked": True}
+
+    # We hold the per-scope lock — any 'running' row in dream_runs is therefore
+    # an orphan from a previously-killed process. Flip them to failed before
+    # creating ours so dream-status, get_running_run, etc. don't see ghosts.
+    mark_orphan_runs_failed(store.conn)
 
     run_id = start_run(store.conn, "heavy")
     n_atoms = 0
