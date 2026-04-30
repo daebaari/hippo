@@ -30,7 +30,7 @@ def format_memory_block(
     lines = [
         "<memory>",
         "Memory candidates relevant to your input. Read summaries; load any body",
-        "via Bash `~/code/hippo/bin/memory-get <head_id>` if you need detail.",
+        "via Bash `hippo get <head_id>` if you need detail.",
         "",
     ]
     seen_bodies: set[str] = set()
