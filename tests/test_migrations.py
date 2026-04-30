@@ -33,7 +33,7 @@ def test_run_migrations_is_idempotent(temp_memory_dir: Path) -> None:
     conn = open_connection(db_path)
     run_migrations(conn)
     run_migrations(conn)  # second call must not raise
-    assert current_version(conn) == 2
+    assert current_version(conn) == 3
 
 
 def test_sqlite_vec_extension_loaded(temp_memory_dir: Path) -> None:
@@ -91,3 +91,20 @@ def test_migration_002_adds_prune_columns(tmp_path: Path) -> None:
     # Re-running is idempotent
     run_migrations(conn)
     conn.close()
+
+
+def test_migration_003_adds_progress_columns(sqlite_conn):
+    from hippo.storage.migrations import run_migrations
+
+    run_migrations(sqlite_conn)
+    cols = {
+        row["name"]
+        for row in sqlite_conn.execute("PRAGMA table_info(dream_runs)").fetchall()
+    }
+    assert {
+        "current_phase",
+        "phase_done",
+        "phase_total",
+        "phase_started_at",
+        "last_progress_at",
+    }.issubset(cols)
