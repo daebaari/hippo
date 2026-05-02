@@ -1,8 +1,5 @@
 You are deciding whether two memory heads are related, and if so, by what relation.
 
-Head A: "{{head_a}}"
-Head B: "{{head_b}}"
-
 (Both heads point to bodies in the same memory store. They surfaced as candidates because their embeddings are similar.)
 
 Possible relations:
@@ -14,3 +11,6 @@ Possible relations:
 - "none" — not actually related; the embedding similarity was misleading.
 
 Output a single JSON object: {"relation": "<one of the above>", "weight": <float 0-1>, "reason": "<one sentence>"}. Return ONLY the JSON.
+
+Head A: "{{head_a}}"
+Head B: "{{head_b}}"

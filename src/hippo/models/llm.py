@@ -20,7 +20,7 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
-LLM_MODEL_ID = "mlx-community/Qwen2.5-32B-Instruct-4bit"
+LLM_MODEL_ID = "lmstudio-community/gemma-4-26B-A4B-it-MLX-4bit"
 
 
 class LLMProto(Protocol):
@@ -33,11 +33,31 @@ class LLMProto(Protocol):
         thinking_level: str | None = None,
     ) -> str: ...
 
+    def generate_chat_batch(
+        self,
+        message_lists: list[list[dict[str, str]]],
+        *,
+        temperature: float,
+        max_tokens: int,
+        thinking_level: str | None = None,
+        batch_size: int = 8,
+    ) -> list[str]:
+        """Run multiple chat-style prompts and return one completion per input,
+        in input order. Implementations may parallelize (e.g. mlx_lm.batch_generate)
+        or fall back to a sequential loop. Output length must equal input length."""
+        ...
+
 
 @dataclass
 class LocalLLM:
     model: Any
     tokenizer: Any
+    # Lazily-built shared-prefix KV cache, keyed by the tokenized prefix.
+    # Populated on the first generate_chat_batch call whose inputs share a long
+    # prefix; reused on subsequent calls with the same prefix. None on a fresh
+    # instance and after teardown.
+    _prefix_tokens: list[int] | None = None
+    _prefix_cache: Any = None
 
     @staticmethod
     def load() -> LocalLLM:
@@ -57,18 +77,106 @@ class LocalLLM:
             verbose=False,
         )
 
+    def _format_chat_prompt(self, messages: list[dict[str, str]]) -> str:
+        # enable_thinking=False auto-closes the model's thinking block in the prompt.
+        # Required for Gemma 4 — its default thinking trace eats max_tokens before any
+        # JSON/structured output is emitted. Tokenizers that don't accept the kwarg
+        # fall back to plain template (older models without thinking mode).
+        try:
+            return str(self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+                enable_thinking=False,
+            ))
+        except TypeError:
+            return str(self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            ))
+
     def generate_chat(
         self,
         messages: list[dict[str, str]],
         *,
         temperature: float = 0.2,
         max_tokens: int = 1024,
-        thinking_level: str | None = None,  # ignored; LocalLLM has no thinking
+        thinking_level: str | None = None,  # ignored; LocalLLM thinking is forced off
     ) -> str:
-        prompt = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        prompt = self._format_chat_prompt(messages)
         return self.generate(prompt, temperature=temperature, max_tokens=max_tokens)
+
+    def generate_chat_batch(
+        self,
+        message_lists: list[list[dict[str, str]]],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+        thinking_level: str | None = None,  # ignored; LocalLLM thinking is forced off
+        batch_size: int = 8,
+    ) -> list[str]:
+        """Batched chat generation via mlx_lm.batch_generate, with a lazily-built
+        shared-prefix KV cache when all prompts in the batch share a token prefix.
+
+        Strategy per batch chunk:
+          1. Tokenize each chunk member's full prompt.
+          2. Compute the longest token prefix common to all chunk members.
+          3. If the common prefix is the cached one, deepcopy the cache per
+             sequence and pass the suffixes; otherwise rebuild or skip the cache.
+          4. Run mlx_lm.batch_generate; collect responses in input order.
+        """
+        if not message_lists:
+            return []
+        from mlx_lm import batch_generate
+        from mlx_lm.models.cache import make_prompt_cache
+        import copy as _copy
+        import mlx.core as mx
+
+        # Pre-tokenize every prompt up front. Done once per call.
+        token_lists: list[list[int]] = [
+            list(self.tokenizer.encode(self._format_chat_prompt(m)))
+            for m in message_lists
+        ]
+
+        results: list[str] = [""] * len(token_lists)
+        for start in range(0, len(token_lists), batch_size):
+            chunk = token_lists[start:start + batch_size]
+            chunk_caches: list[list[Any]] | None = None
+
+            if len(chunk) >= 2:
+                # Longest token prefix common to every prompt in this chunk.
+                common = chunk[0]
+                for ids in chunk[1:]:
+                    n = 0
+                    upper = min(len(common), len(ids))
+                    while n < upper and common[n] == ids[n]:
+                        n += 1
+                    common = common[:n]
+                    if not common:
+                        break
+
+                if len(common) >= 32:  # only worth caching for non-trivial prefixes
+                    if (
+                        self._prefix_cache is None
+                        or self._prefix_tokens != common
+                    ):
+                        self._prefix_cache = make_prompt_cache(self.model)
+                        self.model(mx.array(common)[None], cache=self._prefix_cache)
+                        mx.eval([c.state for c in self._prefix_cache])
+                        self._prefix_tokens = list(common)
+                    suffixes = [ids[len(common):] for ids in chunk]
+                    chunk_caches = [
+                        _copy.deepcopy(self._prefix_cache) for _ in suffixes
+                    ]
+                    chunk = suffixes
+
+            resp = batch_generate(
+                self.model, self.tokenizer,
+                prompts=chunk,
+                prompt_caches=chunk_caches,
+                max_tokens=max_tokens,
+                verbose=False,
+            )
+            for i, text in enumerate(resp.texts):
+                results[start + i] = text
+        return results
 
 
 _RETRYABLE_HTTP = frozenset({408, 429, 500, 502, 503, 504})
@@ -132,6 +240,27 @@ class GeminiLLM:
         )
         return self._call_with_retry(contents=contents, config=config)
 
+    def generate_chat_batch(
+        self,
+        message_lists: list[list[dict[str, str]]],
+        *,
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+        thinking_level: str | None = None,
+        batch_size: int = 8,  # ignored; Gemini calls go one-at-a-time
+    ) -> list[str]:
+        """Sequential per-message fallback. Gemini has no equivalent local-batch
+        primitive; we keep the API surface so callers don't branch on backend."""
+        return [
+            self.generate_chat(
+                m,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking_level=thinking_level,
+            )
+            for m in message_lists
+        ]
+
     def _call_with_retry(self, *, contents: Any, config: Any) -> str:
         import httpx
         from google.genai import errors
@@ -169,7 +298,7 @@ def select_llm(*, strict: bool = False) -> LocalLLM | GeminiLLM:
     """
     from hippo.config import ConfigError, load_api_key, load_config
     cfg = load_config()
-    if cfg.backend == "qwen":
+    if cfg.backend == "local":
         return LocalLLM.load()
     if cfg.backend == "gemini":
         key = load_api_key()
@@ -181,7 +310,7 @@ def select_llm(*, strict: bool = False) -> LocalLLM | GeminiLLM:
             )
             if strict:
                 raise ConfigError(msg)
-            print(f"WARNING: {msg} Falling back to qwen.", file=sys.stderr)
+            print(f"WARNING: {msg} Falling back to local.", file=sys.stderr)
             return LocalLLM.load()
         return GeminiLLM.load(
             api_key=key,

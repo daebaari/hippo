@@ -18,6 +18,7 @@ class StubLLM:
 
     def __init__(self) -> None:
         self.thinking_levels: list[str | None] = []
+        self.batch_calls: int = 0
 
     def generate_chat(
         self,
@@ -29,6 +30,26 @@ class StubLLM:
     ) -> str:
         self.thinking_levels.append(thinking_level)
         return '{"relation":"causes","weight":0.8}'
+
+    def generate_chat_batch(
+        self,
+        message_lists: list[list[dict[str, str]]],
+        *,
+        temperature: float,
+        max_tokens: int,
+        thinking_level: str | None = None,
+        batch_size: int = 8,
+    ) -> list[str]:
+        self.batch_calls += 1
+        return [
+            self.generate_chat(
+                m,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking_level=thinking_level,
+            )
+            for m in message_lists
+        ]
 
 
 @pytest.fixture
@@ -125,6 +146,89 @@ def test_propose_edges_skips_dissimilar_heads(store: object) -> None:
     count = propose_edges(store=store, llm=StubLLM())  # type: ignore[arg-type]
 
     assert count == 0
+
+
+def test_propose_edges_uses_batch_api(store: object) -> None:
+    """propose_edges goes through generate_chat_batch, not generate_chat."""
+    embedding = _make_embedding(1.0, 0.0)
+    for i in range(3):
+        insert_body(
+            store.conn,  # type: ignore[attr-defined]
+            BodyRecord(
+                body_id=f"body-batch-{i}",
+                file_path=f"bodies/body-batch-{i}.md",
+                title=f"t{i}",
+                scope="global",
+                source="test",
+            ),
+        )
+        insert_head(
+            store.conn,  # type: ignore[attr-defined]
+            HeadRecord(
+                head_id=f"head-batch-{i}",
+                body_id=f"body-batch-{i}",
+                summary=f"summary {i}",
+            ),
+        )
+        insert_head_embedding(  # type: ignore[attr-defined]
+            store.conn, f"head-batch-{i}", embedding,
+        )
+
+    stub = StubLLM()
+    count = propose_edges(store=store, llm=stub, batch_size=8)  # type: ignore[arg-type]
+
+    assert count == 3
+    # 3 pairs all fit in one batch_size=8 chunk → exactly one batch call.
+    assert stub.batch_calls == 1
+    assert len(stub.thinking_levels) == 3
+
+
+def test_propose_edges_chunks_when_exceeding_batch_size(store: object) -> None:
+    """With batch_size=2 and 3 pairs, we get two chunks (sizes 2 and 1)."""
+    embedding = _make_embedding(1.0, 0.0)
+    for i in range(3):
+        insert_body(
+            store.conn,  # type: ignore[attr-defined]
+            BodyRecord(
+                body_id=f"body-chunk-{i}",
+                file_path=f"bodies/body-chunk-{i}.md",
+                title=f"t{i}",
+                scope="global",
+                source="test",
+            ),
+        )
+        insert_head(
+            store.conn,  # type: ignore[attr-defined]
+            HeadRecord(
+                head_id=f"head-chunk-{i}",
+                body_id=f"body-chunk-{i}",
+                summary=f"summary {i}",
+            ),
+        )
+        insert_head_embedding(  # type: ignore[attr-defined]
+            store.conn, f"head-chunk-{i}", embedding,
+        )
+
+    stub = StubLLM()
+    count = propose_edges(store=store, llm=stub, batch_size=2)  # type: ignore[arg-type]
+
+    assert count == 3
+    # 3 pairs / batch_size=2 → ceil(3/2) = 2 batch calls.
+    assert stub.batch_calls == 2
+
+
+def test_propose_edges_empty_clusters_skips_llm(store: object) -> None:
+    """No eligible pairs → progress_cb fired with (0, 0), no batch call."""
+    stub = StubLLM()
+    progress_calls: list[tuple[int, int]] = []
+    count = propose_edges(
+        store=store,  # type: ignore[arg-type]
+        llm=stub,
+        progress_cb=lambda d, t: progress_calls.append((d, t)),
+    )
+    assert count == 0
+    assert stub.batch_calls == 0
+    assert progress_calls == [(0, 0)]
 
 
 def test_propose_edges_invokes_progress_cb_per_pair(store: object) -> None:

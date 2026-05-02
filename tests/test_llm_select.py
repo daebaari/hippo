@@ -79,6 +79,56 @@ class TestGeminiRetry:
         assert llm.client.models.calls == 1
 
 
+class _SeqModels:
+    """Returns 'r0', 'r1', ... in order, recording which prompt produced each."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def generate_content(self, *, model, contents, config):
+        idx = len(self.calls)
+        self.calls.append(contents if isinstance(contents, str) else str(contents))
+        class _Resp:
+            text = f"r{idx}"
+        return _Resp()
+
+
+class _SeqClient:
+    def __init__(self) -> None:
+        self.models = _SeqModels()
+
+
+class TestGeminiBatch:
+    def _llm(self) -> GeminiLLM:
+        return GeminiLLM(
+            client=_SeqClient(),
+            model_id="x",
+            default_thinking_level="minimal",
+        )
+
+    def test_batch_returns_one_response_per_message_in_order(self) -> None:
+        llm = self._llm()
+        out = llm.generate_chat_batch(
+            [
+                [{"role": "user", "content": "first"}],
+                [{"role": "user", "content": "second"}],
+                [{"role": "user", "content": "third"}],
+            ],
+            temperature=0.1,
+            max_tokens=10,
+        )
+        assert out == ["r0", "r1", "r2"]
+        # And each prompt body landed in the recorded contents.
+        assert llm.client.models.calls[0] == "first"
+        assert llm.client.models.calls[1] == "second"
+        assert llm.client.models.calls[2] == "third"
+
+    def test_batch_empty_input_returns_empty_list(self) -> None:
+        llm = self._llm()
+        assert llm.generate_chat_batch([], temperature=0.1, max_tokens=10) == []
+        assert llm.client.models.calls == []
+
+
 class TestSelectLLM:
     def _patch_loaders(self, monkeypatch):
         from hippo.models import llm as llm_mod
@@ -107,7 +157,14 @@ class TestSelectLLM:
         from hippo.models.llm import select_llm
         assert select_llm() is local
 
-    def test_qwen_explicit(self, monkeypatch, tmp_path):
+    def test_local_explicit(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        (tmp_path / "hippo-config.toml").write_text('backend = "local"\n')
+        local, _ = self._patch_loaders(monkeypatch)
+        from hippo.models.llm import select_llm
+        assert select_llm() is local
+
+    def test_qwen_legacy_value_aliases_to_local(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
         (tmp_path / "hippo-config.toml").write_text('backend = "qwen"\n')
         local, _ = self._patch_loaders(monkeypatch)
@@ -159,7 +216,7 @@ class TestSelectLLM:
         out = select_llm(strict=False)
         assert out is local
         err = capsys.readouterr().err
-        assert "WARNING" in err and "qwen" in err.lower()
+        assert "WARNING" in err and "local" in err.lower()
 
 
 def test_gemini_missing_dep_raises_configerror(monkeypatch, tmp_path):

@@ -40,7 +40,11 @@ class DaemonProto(Protocol):
 
 
 class _CountingLLM:
-    """Transparent LLMProto wrapper that counts generate_chat invocations."""
+    """Transparent LLMProto wrapper that counts LLM invocations.
+
+    `count` reflects the number of model responses produced (one per chat
+    message), regardless of whether they came in via generate_chat or were
+    multiplexed through generate_chat_batch."""
 
     def __init__(self, inner: LLMProto) -> None:
         self._inner = inner
@@ -49,6 +53,11 @@ class _CountingLLM:
     def generate_chat(self, *args: Any, **kwargs: Any) -> str:
         self.count += 1
         return self._inner.generate_chat(*args, **kwargs)
+
+    def generate_chat_batch(self, *args: Any, **kwargs: Any) -> list[str]:
+        out = self._inner.generate_chat_batch(*args, **kwargs)
+        self.count += len(out)
+        return out
 
 
 @contextmanager

@@ -42,6 +42,25 @@ class FakeLLM:
             return json.dumps({"decision": "keep_both", "keeper": None, "reason": "x"})
         return "[]"
 
+    def generate_chat_batch(
+        self,
+        message_lists: list[list[dict[str, str]]],
+        *,
+        temperature: float,
+        max_tokens: int,
+        thinking_level: str | None = None,
+        batch_size: int = 8,
+    ) -> list[str]:
+        return [
+            self.generate_chat(
+                m,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                thinking_level=thinking_level,
+            )
+            for m in message_lists
+        ]
+
 
 class FakeDaemon:
     def embed(self, texts: list[str]) -> list[list[float]]:
