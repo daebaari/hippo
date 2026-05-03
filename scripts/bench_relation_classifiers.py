@@ -1229,6 +1229,220 @@ class GemmaBatchPrefixBackend:
             pass
 
 
+MULTI_PAIR_PROMPT_HEADER = '''You are deciding the relation (if any) between pairs of memory heads.
+
+For each pair, choose one of:
+- "causes" — A causes B (or B is a consequence of A). Asymmetric.
+- "contradicts" — A and B make incompatible claims. Symmetric.
+- "related" — meaningfully connected but no specific relation. Symmetric.
+- "none" — not actually related; the embedding similarity was misleading.
+
+Output a JSON array with exactly one object per input pair, in the same order as the input. Each object has shape: {{"relation": "<one of the above>", "weight": <float 0-1>}}. Return ONLY the JSON array — no prose, no markdown fences.
+
+Pairs:
+'''
+
+
+def _format_multi_pair_user_content(pairs_chunk: list[tuple[str, str, str]]) -> str:
+    """Render N pairs into one multi-pair user message.
+    Static instructions come first (cacheable prefix); pair list comes last."""
+    lines = [MULTI_PAIR_PROMPT_HEADER]
+    for idx, (_label, a, b) in enumerate(pairs_chunk, start=1):
+        lines.append(f'{idx}. A: "{a}" B: "{b}"')
+    return "\n".join(lines)
+
+
+def _parse_multi_pair_array(raw: str, expected: int) -> list[str]:
+    """Extract `expected` relation labels from a JSON array response.
+    Falls back to scanning per-object regex if the array isn't clean JSON.
+    Pads with PARSE_ERROR for any missing entries; truncates extras."""
+    text = raw
+    if '<channel|>' in text:
+        text = text.split('<channel|>', 1)[1]
+    text = re.sub(r'```(?:json)?\s*', '', text).replace('```', '')
+    text = text.strip()
+    # First try whole-string JSON.
+    out: list[str] = []
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, list):
+            for item in obj:
+                if isinstance(item, dict) and 'relation' in item:
+                    out.append(str(item['relation']))
+    except json.JSONDecodeError:
+        pass
+    if len(out) != expected:
+        # Fall back: scan for "relation":"<label>" occurrences in document order.
+        out = re.findall(
+            r'"relation"\s*:\s*"(causes|contradicts|related|none)"', text
+        )
+    # Pad / truncate to exactly `expected` entries.
+    if len(out) < expected:
+        out = out + ['PARSE_ERROR'] * (expected - len(out))
+    elif len(out) > expected:
+        out = out[:expected]
+    return out
+
+
+@dataclass
+class GemmaMultiPairBackend:
+    """Gemma combining batch + prefix-cache + multi-pair-per-prompt.
+
+    Each LLM sequence in a batch carries `pairs_per_prompt` independent
+    pairs and asks for one JSON array of N classifications. The shared
+    instruction prefix is KV-cached across batch members, and `batch_size`
+    sequences run in parallel via mlx_lm.batch_generate. So one
+    batch_generate call processes `batch_size * pairs_per_prompt` pairs.
+
+    Tradeoffs:
+    - Pro: amortizes prefix prefill over more pairs; fewer total LLM calls.
+    - Con: longer outputs per sequence (roughly 50 tokens × N), risk of
+      degraded accuracy if the model loses track of pairs late in the list.
+    """
+    MODEL_ID: str = 'lmstudio-community/gemma-4-26B-A4B-it-MLX-4bit'
+    name: str = 'gemma-multi-pair'
+    batch_size: int = 4
+    pairs_per_prompt: int = 10
+    max_tokens: int = 1500
+    model: Any = None
+    tokenizer: Any = None
+    prefix_tokens: list[int] = field(default_factory=list)
+    prefix_cache: Any = None
+
+    def _format_chat_for_pairs(self, pairs_chunk: list[tuple[str, str, str]]) -> str:
+        text = _format_multi_pair_user_content(pairs_chunk)
+        return self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": text}],
+            tokenize=False, add_generation_prompt=True,
+            enable_thinking=False,
+        )
+
+    def setup(self) -> None:
+        from mlx_lm import load
+        from mlx_lm.models.cache import make_prompt_cache
+        import mlx.core as mx
+
+        result = load(self.MODEL_ID)
+        self.model, self.tokenizer = result[0], result[1]
+
+        # Build two distinct sample chunks of size pairs_per_prompt to find
+        # the longest common token prefix (the static instructions block).
+        sample_a = [
+            ("?", f"alpha head a {i}", f"alpha head b {i}")
+            for i in range(self.pairs_per_prompt)
+        ]
+        sample_b = [
+            ("?", f"omega head a {i}", f"omega head b {i}")
+            for i in range(self.pairs_per_prompt)
+        ]
+        t1 = self.tokenizer.encode(self._format_chat_for_pairs(sample_a))
+        t2 = self.tokenizer.encode(self._format_chat_for_pairs(sample_b))
+        n = 0
+        while n < min(len(t1), len(t2)) and t1[n] == t2[n]:
+            n += 1
+        self.prefix_tokens = t1[:n]
+        print(
+            f"  multi-pair: pairs_per_prompt={self.pairs_per_prompt} "
+            f"batch_size={self.batch_size} prefix={n} tokens "
+            f"(of ~{len(t1)}-token sample prompt)",
+            flush=True,
+        )
+
+        self.prefix_cache = make_prompt_cache(self.model)
+        self.model(mx.array(self.prefix_tokens)[None], cache=self.prefix_cache)
+        mx.eval([c.state for c in self.prefix_cache])
+
+    def predict_many(
+        self, pairs: list[tuple[str, str, str]]
+    ) -> list[tuple[str, float]]:
+        from mlx_lm import batch_generate
+        import copy as _copy
+
+        prefix_len = len(self.prefix_tokens)
+
+        # Group pairs into chunks of pairs_per_prompt → each chunk becomes one
+        # multi-pair prompt sequence.
+        prompt_chunks: list[list[tuple[str, str, str]]] = []
+        for i in range(0, len(pairs), self.pairs_per_prompt):
+            prompt_chunks.append(pairs[i:i + self.pairs_per_prompt])
+
+        # Tokenize each chunk's prompt; slice off shared prefix when matched.
+        suffix_lists: list[list[int]] = []
+        used_cache_flags: list[bool] = []
+        for chunk in prompt_chunks:
+            full_tokens = self.tokenizer.encode(self._format_chat_for_pairs(chunk))
+            if full_tokens[:prefix_len] == self.prefix_tokens:
+                suffix_lists.append(full_tokens[prefix_len:])
+                used_cache_flags.append(True)
+            else:
+                suffix_lists.append(full_tokens)
+                used_cache_flags.append(False)
+
+        # Walk batch_size sequences at a time through batch_generate.
+        results: list[tuple[str, float]] = []
+        n_chunks = len(prompt_chunks)
+        for i in range(0, n_chunks, self.batch_size):
+            seq_slice = suffix_lists[i:i + self.batch_size]
+            chunk_slice = prompt_chunks[i:i + self.batch_size]
+            flags_slice = used_cache_flags[i:i + self.batch_size]
+            if all(flags_slice):
+                chunk_caches: list[list[Any]] | None = [
+                    _copy.deepcopy(self.prefix_cache) for _ in seq_slice
+                ]
+            else:
+                chunk_caches = None
+
+            t0 = time.time()
+            resp = batch_generate(
+                self.model, self.tokenizer,
+                prompts=seq_slice,
+                prompt_caches=chunk_caches,
+                max_tokens=self.max_tokens,
+                verbose=False,
+            )
+            elapsed = time.time() - t0
+
+            n_pairs_in_call = sum(len(c) for c in chunk_slice)
+            per_pair_lat = elapsed / max(n_pairs_in_call, 1)
+            for raw_text, sub_chunk in zip(resp.texts, chunk_slice, strict=True):
+                labels = _parse_multi_pair_array(raw_text, expected=len(sub_chunk))
+                for label in labels:
+                    results.append((label, per_pair_lat))
+            print(
+                f"  multi-pair batch[{i:>3}-{i + len(seq_slice):>3}] "
+                f"{len(seq_slice)} seqs × ~{self.pairs_per_prompt} pairs "
+                f"({n_pairs_in_call} pairs total) in {elapsed:5.2f}s "
+                f"({per_pair_lat:.3f}s/pair, {n_pairs_in_call / elapsed:.2f} pairs/s)"
+                + ("" if all(flags_slice) else "  [no-cache fallback]"),
+                flush=True,
+            )
+        return results
+
+    def predict(self, a: str, b: str) -> tuple[str, float]:
+        out = self.predict_many([("?", a, b)])
+        return out[0]
+
+    def teardown(self) -> None:
+        self.model = None
+        self.tokenizer = None
+        self.prefix_cache = None
+        self.prefix_tokens = []
+        gc.collect()
+        try:
+            import mlx.core as mx
+            mx.metal.clear_cache()
+        except Exception:
+            pass
+
+
+def _gemma_multi_pair_5():
+    return GemmaMultiPairBackend(name='gemma-multi-pair-5', pairs_per_prompt=5)
+
+
+def _gemma_multi_pair_20():
+    return GemmaMultiPairBackend(name='gemma-multi-pair-20', pairs_per_prompt=20, max_tokens=2500)
+
+
 @dataclass
 class GeminiBackend:
     name: str = 'gemini-3-flash'
@@ -1405,6 +1619,9 @@ BACKENDS: dict[str, Callable[[], Backend]] = {
     'gemma-batch-16': _gemma_batch_b16,
     'gemma-prefix':   GemmaPrefixCacheBackend,
     'gemma-batch-prefix': GemmaBatchPrefixBackend,
+    'gemma-multi-pair':   GemmaMultiPairBackend,
+    'gemma-multi-pair-5': _gemma_multi_pair_5,
+    'gemma-multi-pair-20': _gemma_multi_pair_20,
     'gemini':         GeminiBackend,
 }
 
