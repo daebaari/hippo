@@ -48,6 +48,8 @@ class _SingleScopeAction(argparse.Action):
             parser.error(
                 f"{option_string}: only one --scope value allowed for this command"
             )
+        # Wrap the single value in a list so resolve_scopes consumes args.scope
+        # uniformly across single- and multi-scope CommandKinds.
         setattr(namespace, self.dest, [values])
 
 
@@ -89,6 +91,9 @@ def _enumerate_all_scopes() -> list[Scope]:
     scopes: list[Scope] = [Scope.global_()]
     if PROJECTS_ROOT.exists():
         for entry in sorted(PROJECTS_ROOT.iterdir()):
+            if entry.name == "global":
+                # 'global' is reserved as the cross-project scope name.
+                continue
             if (entry / "memory" / DB_FILENAME).exists():
                 scopes.append(Scope.project(entry.name))
     return scopes

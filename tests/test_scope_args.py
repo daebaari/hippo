@@ -40,6 +40,12 @@ def test_explicit_scope_global_value(tmp_path: Path) -> None:
     assert scopes == [Scope.global_()]
 
 
+def test_explicit_scope_mixes_global_and_project(tmp_path: Path) -> None:
+    args = _parse(["--scope", "global", "--scope", "hippo"], kind="cross_read")
+    scopes = resolve_scopes(args, kind="cross_read", cwd=str(tmp_path))
+    assert scopes == [Scope.global_(), Scope.project("hippo")]
+
+
 def test_scoped_write_in_project_returns_project_only(tmp_path: Path) -> None:
     repo = tmp_path / "hippo"
     (repo / ".git").mkdir(parents=True)
@@ -68,16 +74,32 @@ def test_no_project_no_flag_errors(tmp_path: Path) -> None:
     bare = tmp_path / "nothing"
     bare.mkdir()
     args = _parse([], kind="scoped_write")
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as excinfo:
         resolve_scopes(args, kind="scoped_write", cwd=str(bare))
+    assert excinfo.value.code == 2
 
 
 def test_no_project_no_flag_errors_for_cross_read(tmp_path: Path) -> None:
     bare = tmp_path / "nothing"
     bare.mkdir()
     args = _parse([], kind="cross_read")
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as excinfo:
         resolve_scopes(args, kind="cross_read", cwd=str(bare))
+    assert excinfo.value.code == 2
+
+
+def test_no_project_error_message_format(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bare = tmp_path / "nothing"
+    bare.mkdir()
+    args = _parse([], kind="scoped_write")
+    with pytest.raises(SystemExit):
+        resolve_scopes(args, kind="scoped_write", cwd=str(bare))
+    err = capsys.readouterr().err
+    assert "not in a project" in err
+    assert "--scope <name>" in err
+    assert "--all-scopes" in err
 
 
 def test_all_scopes_enumerates_global_and_every_project(
