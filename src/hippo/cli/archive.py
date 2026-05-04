@@ -2,20 +2,22 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
+from hippo.cli.scope_args import add_scope_args, resolve_scopes
 from hippo.storage.heads import archive_head, get_head
-from hippo.storage.multi_store import Scope, open_store
+from hippo.storage.multi_store import open_store
 
 
 def archive_head_cli(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="memory-archive")
     p.add_argument("head_id")
     p.add_argument("--reason", required=True)
-    p.add_argument("--project", action="append", default=[])
+    add_scope_args(p, kind="targeted")
     args = p.parse_args(argv)
 
-    scopes = [Scope.global_()] + [Scope.project(proj) for proj in args.project]
+    scopes = resolve_scopes(args, kind="targeted", cwd=os.getcwd())
     for scope in scopes:
         store = open_store(scope)
         try:
