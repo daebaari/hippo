@@ -11,7 +11,7 @@ from hippo.dream.atomize import atomize_session
 from hippo.dream.cleanup import finalize_processed_captures
 from hippo.dream.cluster import cluster_active_heads
 from hippo.dream.contradiction import resolve_contradictions
-from hippo.dream.edge_proposal import propose_edges
+from hippo.dream.edge_proposal import collect_pending_pairs, propose_edges
 from hippo.dream.multi_head import expand_heads_for_eligible_bodies
 from hippo.dream.progress import (
     ProgressReporter,
@@ -216,12 +216,17 @@ def run_heavy_dream_for_scope(
         # Phase c-d: cluster + edge proposal
         before = counter.count
         clusters = cluster_active_heads(store.conn)
-        edge_total = sum(len(c) * (len(c) - 1) // 2 for c in clusters)
+        # Filter to pairs that are actually pending LLM evaluation — pairs that
+        # already have an edge from a prior dream run are skipped inside
+        # propose_edges, so the raw cluster pair count would over-state the
+        # phase total and stall the progress %% at pending/raw forever.
+        pending_pairs = collect_pending_pairs(store, clusters)
+        edge_total = len(pending_pairs)
         with _phase_reporter(
             conn=store.conn, run_id=run_id, phase="edge_proposal", total=edge_total
         ) as reporter:
             n_edges += propose_edges(
-                store=store, llm=counter,
+                store=store, llm=counter, pending=pending_pairs,
                 progress_cb=(lambda d, t: reporter.tick(d)) if reporter is not None else None,
             )
         _phase_delta("edge_proposal", before)

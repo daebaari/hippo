@@ -29,19 +29,23 @@ DEFAULT_BATCH_SIZE = 8
 
 
 @dataclass
-class _PendingPair:
+class PendingPair:
     a_id: str
     b_id: str
     prompt: str
 
 
-def _collect_pending_pairs(
+def collect_pending_pairs(
     store: Store,
     clusters: list[list[str]],
-) -> list[_PendingPair]:
-    """First pass: enumerate all within-cluster pairs, drop ones already edged
-    or with missing heads, render the LLM prompt for survivors."""
-    pending: list[_PendingPair] = []
+) -> list[PendingPair]:
+    """Enumerate all within-cluster pairs, drop ones already edged or with
+    missing heads, render the LLM prompt for survivors.
+
+    Exposed so the orchestrator can compute the true work-unit total before
+    opening a progress phase, instead of using the raw cluster pair count
+    (which over-estimates whenever earlier dream runs already inserted edges)."""
+    pending: list[PendingPair] = []
     for cluster in clusters:
         for i in range(len(cluster)):
             for j in range(i + 1, len(cluster)):
@@ -58,7 +62,7 @@ def _collect_pending_pairs(
                 ).fetchone()
                 if existing is not None:
                     continue
-                pending.append(_PendingPair(
+                pending.append(PendingPair(
                     a_id=a_id,
                     b_id=b_id,
                     prompt=render("edge_typing", head_a=a.summary, head_b=b.summary),
@@ -72,9 +76,11 @@ def propose_edges(
     llm: LLMProto,
     progress_cb: Callable[[int, int], None] | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    pending: list[PendingPair] | None = None,
 ) -> int:
-    clusters = cluster_active_heads(store.conn)
-    pending = _collect_pending_pairs(store, clusters)
+    if pending is None:
+        clusters = cluster_active_heads(store.conn)
+        pending = collect_pending_pairs(store, clusters)
     total_pairs = len(pending)
     n_inserted = 0
 

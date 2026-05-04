@@ -39,13 +39,15 @@ Useful right after a long working session, after `bin/dream-bootstrap`, or
 when iterating on dream phases.
 
 **Switching LLM backend.** Use `/hippo-backend` (no args) to view current
-backend and key-detection status. `/hippo-backend qwen` or `/hippo-backend
-gemini` switches and persists in `~/.claude/hippo-config.toml`. Gemini
-needs a key in `GOOGLE_API_KEY`/`GEMINI_API_KEY` env or
-`~/.claude/hippo-secrets` (mode 600). Manual `bin/dream-heavy` runs hard-fail
-on missing key; the launchd nightly run silently falls back to qwen and
-writes a warning to `~/.claude/debug/dream-heavy.err`. Install the SDK with
-`uv sync --extra gemini`. See `src/hippo/config.py` for current defaults.
+backend and key-detection status. `/hippo-backend local` or `/hippo-backend
+gemini` switches and persists in `~/.claude/hippo-config.toml` (`qwen` is
+accepted as a legacy alias for `local`). Gemini needs a key in
+`GOOGLE_API_KEY`/`GEMINI_API_KEY` env or `~/.claude/hippo-secrets`
+(mode 600). Manual `bin/dream-heavy` runs hard-fail on missing key; the
+launchd nightly run silently falls back to local and writes a warning to
+`~/.claude/debug/dream-heavy.err`. Install the SDK with
+`uv sync --extra gemini`. See `src/hippo/config.py` for the active local
+model ID.
 
 ## 3. Inspect storage
 

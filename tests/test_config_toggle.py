@@ -33,7 +33,14 @@ class TestConfig:
     def test_load_missing_file_returns_defaults(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
         c = cfg.load_config()
-        assert c.backend == "qwen"
+        assert c.backend == "local"
+
+    def test_legacy_qwen_value_aliases_to_local(self, monkeypatch, tmp_path):
+        """Existing config files with backend=qwen keep working."""
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        (tmp_path / "hippo-config.toml").write_text('backend = "qwen"\n')
+        c = cfg.load_config()
+        assert c.backend == "local"
 
     def test_round_trip(self, monkeypatch, tmp_path):
         monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))

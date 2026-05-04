@@ -1,4 +1,8 @@
-"""Slash-command CLI: /hippo-backend [qwen|gemini]"""
+"""Slash-command CLI: /hippo-backend [local|gemini]
+
+"qwen" is accepted as a legacy alias for "local" so existing muscle memory
+and config files keep working.
+"""
 from __future__ import annotations
 
 import argparse
@@ -13,6 +17,8 @@ from hippo.config import (
     secrets_path,
     write_config,
 )
+
+_BACKEND_ALIASES: dict[str, str] = {"qwen": "local"}
 
 
 def _print_status() -> int:
@@ -36,6 +42,7 @@ def _print_status() -> int:
 
 
 def _switch(backend: str) -> int:
+    backend = _BACKEND_ALIASES.get(backend, backend)
     current = load_config()
     new_cfg = Config(
         backend=backend,
@@ -55,7 +62,7 @@ def _switch(backend: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="hippo-backend")
-    p.add_argument("backend", nargs="?", choices=["qwen", "gemini"])
+    p.add_argument("backend", nargs="?", choices=["local", "qwen", "gemini"])
     args = p.parse_args(argv)
     if args.backend is None:
         return _print_status()

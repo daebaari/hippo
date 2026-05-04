@@ -6,8 +6,11 @@ import json
 from hippo.config import EMBEDDING_DIM, HEAVY_LOCK_FILENAME
 from hippo.dream.heavy import run_heavy_dream_all_scopes, run_heavy_dream_for_scope
 from hippo.lock import acquire_lock
+from hippo.storage.bodies import BodyRecord, insert_body
 from hippo.storage.capture import CaptureRecord, enqueue_capture
+from hippo.storage.heads import HeadRecord, insert_head
 from hippo.storage.multi_store import Scope, open_store
+from hippo.storage.vec import insert_head_embedding
 
 
 class FakeLLM:
@@ -191,6 +194,66 @@ def test_heavy_dream_runs_review_phase_and_records_counter(tmp_path, monkeypatch
             assert review_idx < later_idx, f"review must precede {label}"
 
     s.conn.close()
+
+
+def test_edge_proposal_phase_total_excludes_pre_existing_edges(
+    tmp_path, monkeypatch, capsys,
+):
+    """edge_proposal phase total must equal the number of pairs actually
+    evaluated, not the raw within-cluster pair count.
+
+    Regression for: progress jumps from ~50% to 100% because heavy.py reported
+    edge_total based on raw cluster pair counts while propose_edges filtered
+    out pairs with existing edges, leaving the per-tick %% maxed at the
+    pending/raw ratio.
+    """
+    monkeypatch.setattr("hippo.config.GLOBAL_MEMORY_DIR", tmp_path / "global")
+
+    s = open_store(Scope.global_())
+
+    embedding = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
+    for i in range(3):
+        body_id = f"body-pre-{i}"
+        insert_body(
+            s.conn,
+            BodyRecord(
+                body_id=body_id, file_path=f"bodies/{body_id}.md",
+                title=f"t{i}", scope="global", source="test",
+            ),
+        )
+        head_id = f"head-pre-{i}"
+        insert_head(
+            s.conn,
+            HeadRecord(head_id=head_id, body_id=body_id, summary=f"s{i}"),
+        )
+        insert_head_embedding(s.conn, head_id, embedding)
+
+    # 3 heads in one cluster → 3 raw pairs. Pre-insert one edge so 2 pairs
+    # remain pending. The orchestrator's reported total must be 2, not 3.
+    s.conn.execute(
+        "INSERT INTO edges(from_head, to_head, relation, weight, created_at) "
+        "VALUES ('head-pre-0', 'head-pre-1', 'related', 1.0, 1000)"
+    )
+    s.conn.commit()
+    s.conn.close()
+
+    run_heavy_dream_all_scopes(
+        scopes=[Scope.global_()], llm=FakeLLM(), daemon=FakeDaemon(),
+    )
+
+    captured = capsys.readouterr()
+    start_lines = [
+        line for line in captured.err.splitlines()
+        if "phase=edge_proposal" in line
+        and "total=" in line and "done=" not in line
+    ]
+    assert start_lines, (
+        f"edge_proposal start line missing from stderr; got: {captured.err!r}"
+    )
+    total = int(start_lines[0].split("total=")[1].strip())
+    assert total == 2, (
+        f"expected edge_proposal total=2 (pending pairs only), got total={total}"
+    )
 
 
 def test_heavy_dream_writes_phase_progress_rows(tmp_path, monkeypatch):

@@ -10,7 +10,7 @@ See `docs/architecture.md` for the full design.
 
 ## Status
 
-**All milestones complete (v0.1).** Storage, model daemon, retrieval pipeline, capture pipeline, light dream, heavy dream, the bootstrap migration tool, and the one-shot installer are all in. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. The heavy dream — LLM-driven atomization of raw turns into atoms, multi-head expansion, embedding-clustered LLM-judged typed edges, contradiction resolution, and cleanup — runs nightly at 3am on AC power via launchd, or on demand via the `/hippo-dream` slash command. The model is Qwen 2.5 32B Instruct (4-bit MLX, ~18GB resident) loaded once per run and unloaded after.
+**All milestones complete (v0.1).** Storage, model daemon, retrieval pipeline, capture pipeline, light dream, heavy dream, the bootstrap migration tool, and the one-shot installer are all in. A `UserPromptSubmit` hook injects retrieved memories on every user turn; a `Stop` hook persists each completed turn to `capture_queue` and writes a turn-level embedding; a `PreCompact` hook runs the light dream, which mechanically (no LLM) creates one `session-meta:<session_id>` atom per unique session seen in the capture queue. The heavy dream — LLM-driven atomization of raw turns into atoms, multi-head expansion, embedding-clustered LLM-judged typed edges, contradiction resolution, and cleanup — runs nightly at 3am on AC power via launchd, or on demand via the `/hippo-dream` slash command. The default local model is Gemma 4 26B (MoE A4B, 4-bit MLX, ~15GB resident) loaded once per run and unloaded after; Gemini 3 Flash is available as an opt-in API backend via `/hippo-backend gemini`.
 
 ## Quick start
 
@@ -145,7 +145,7 @@ src/hippo/
   models/
     embedder.py          # mxbai-embed-large wrapper
     reranker.py          # mxbai-rerank-large wrapper
-    llm.py               # Qwen 2.5 32B Instruct (4-bit MLX) wrapper
+    llm.py               # local LLM (Gemma 4 26B MoE 4-bit MLX) + Gemini API wrappers
   daemon/
     protocol.py          # newline-delimited JSON request/response
     server.py            # Unix-socket server, model lifecycle
@@ -176,7 +176,7 @@ src/hippo/
     get.py               # memory-get (fetch a head/body by id)
     search.py            # memory-search (ad-hoc retrieval)
     archive.py           # memory-archive (mark heads archived)
-    dream_heavy.py       # bin/dream-heavy entry point (loads Qwen, runs phases)
+    dream_heavy.py       # bin/dream-heavy entry point (loads local LLM, runs phases)
     dream_status.py      # bin/dream-status entry point (read-only)
     dream_bootstrap.py   # bin/dream-bootstrap entry point (legacy migration)
 bin/

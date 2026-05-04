@@ -14,7 +14,7 @@ class TestStatus:
         rc = backend_toggle.main([])
         assert rc == 0
         out = capsys.readouterr().out
-        assert "backend: qwen" in out
+        assert "backend: local" in out
         assert "api_key: not detected" in out
 
     def test_status_with_env_key(self, monkeypatch, tmp_path, capsys):
@@ -27,14 +27,22 @@ class TestStatus:
 
 
 class TestSwitch:
-    def test_switch_to_qwen(self, monkeypatch, tmp_path, capsys):
+    def test_switch_to_local(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
+        rc = backend_toggle.main(["local"])
+        assert rc == 0
+        from hippo.config import load_config
+        assert load_config().backend == "local"
+        out = capsys.readouterr().out
+        assert "switched to local" in out.lower()
+
+    def test_switch_to_qwen_alias(self, monkeypatch, tmp_path, capsys):
+        """Legacy 'qwen' input maps to 'local' on disk."""
         monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))
         rc = backend_toggle.main(["qwen"])
         assert rc == 0
         from hippo.config import load_config
-        assert load_config().backend == "qwen"
-        out = capsys.readouterr().out
-        assert "switched to qwen" in out.lower()
+        assert load_config().backend == "local"
 
     def test_switch_to_gemini_with_key(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("HIPPO_CONFIG_DIR", str(tmp_path))

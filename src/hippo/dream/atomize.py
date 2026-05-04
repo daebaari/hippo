@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from typing import Protocol
 from uuid import uuid4
@@ -20,12 +21,17 @@ class DaemonProto(Protocol):
 
 
 def _strip_fences(s: str) -> str:
+    """Tolerant cleanup of LLM JSON output. Handles:
+    - leading/trailing ``` or ```json fences (legacy behavior)
+    - mid-output ```json fences (Gemma sometimes wraps the answer)
+    - <channel|> markers (Gemma's thinking-channel close; should be unreachable
+      with enable_thinking=False but harmless if it ever leaks through).
+    """
     s = s.strip()
-    if s.startswith("```"):
-        # remove first fence line
-        s = s.split("\n", 1)[1] if "\n" in s else s
-    if s.endswith("```"):
-        s = s.rsplit("```", 1)[0]
+    if "<channel|>" in s:
+        s = s.split("<channel|>", 1)[1]
+    s = re.sub(r"```(?:json)?\s*", "", s)
+    s = s.replace("```", "")
     return s.strip()
 
 

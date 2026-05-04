@@ -15,12 +15,12 @@ source of truth when this repo's docs and the spec disagree.
   embedder + reranker resident, ~1.6GB RAM, listens on
   `~/.claude/memory-daemon.sock`. Manage via `launchctl kickstart -k`.
 - `com.<user>.dream-heavy` (launchd user agent, StartCalendarInterval 3am AC-only) —
-  fires nightly. Loads Qwen 2.5 32B (~18GB) only at run time.
+  fires nightly. Loads the local LLM (Gemma 4 26B MoE 4-bit, ~15GB) only at run time.
 - 3 hooks registered in `~/.claude/settings.json` under `hippo-*` labels
   (UserPromptSubmit, Stop, PreCompact). Coexist with any pre-existing hooks.
 - `autoMemoryEnabled` and `autoDreamEnabled` are **off** in user settings —
   Hippo replaces both. Do not re-enable without checking with the user.
-- LLM backend: switch with `/hippo-backend`; default qwen; persisted in
+- LLM backend: switch with `/hippo-backend`; default local; persisted in
   `~/.claude/hippo-config.toml`. Gemini also reads
   `~/.claude/hippo-secrets` (mode 600) for the API key. See
   `src/hippo/config.py` and `src/hippo/models/llm.py` for current values.

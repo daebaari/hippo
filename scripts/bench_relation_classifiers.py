@@ -1443,6 +1443,120 @@ def _gemma_multi_pair_20():
     return GemmaMultiPairBackend(name='gemma-multi-pair-20', pairs_per_prompt=20, max_tokens=2500)
 
 
+# NOTE: Gemma 4 dense variants (E2B / E4B) are intentionally absent here.
+# As of mlx-lm 0.31.3 (and git main at the time of writing), the dense E2B
+# and E4B checkpoints from lmstudio-community / mlx-community fail to load:
+# the published weights carry per-layer k_proj/v_proj tensors on layers that
+# mlx-lm's Gemma 4 model class treats as KV-shared, raising
+# "Received N parameters not in model".
+# Loading with strict=False bypasses the error but produces incoherent
+# generations (the skipped weights are not actually redundant on the lmstudio
+# ports). Re-add when an mlx-lm release lands proper Gemma 4 dense support.
+
+
+@dataclass
+class LMStudioBackend:
+    """OpenAI-compatible client against a local LM Studio server.
+
+    Lets us bench any model LM Studio can load (e.g. Gemma 4 dense E2B / E4B,
+    which mlx-lm 0.31.x cannot load directly) without going through MLX from
+    Python. The server runs the model in its own process; we just send chat
+    completion requests over HTTP. No batch primitive — predict_many is a
+    sequential loop.
+
+    Start LM Studio, load a model, and enable "Local Server" (default port
+    1234). Then run with:
+        --backends lmstudio
+        --backends lmstudio-gemma-e4b
+        --backends lmstudio-gemma-e2b
+    """
+    name: str = 'lmstudio'
+    base_url: str = 'http://localhost:1234/v1'
+    model_id: str | None = None  # auto-detect first loaded model if None
+    max_tokens: int = 200
+    request_timeout_s: float = 120.0
+    _session: Any = None
+
+    def setup(self) -> None:
+        import httpx
+        self._session = httpx.Client(timeout=self.request_timeout_s)
+        try:
+            resp = self._session.get(f"{self.base_url}/models")
+            resp.raise_for_status()
+        except Exception as e:
+            raise RuntimeError(
+                f"LM Studio server not reachable at {self.base_url}. "
+                f"Start LM Studio, load a model, enable Local Server. ({e})"
+            ) from e
+        models = [m['id'] for m in resp.json().get('data', [])]
+        if not models:
+            raise RuntimeError(
+                f"LM Studio at {self.base_url} returned no loaded models. "
+                "Load a model in the UI first."
+            )
+        if self.model_id is None:
+            self.model_id = models[0]
+        elif self.model_id not in models:
+            raise RuntimeError(
+                f"LM Studio at {self.base_url} does not have {self.model_id!r} "
+                f"loaded. Currently loaded: {models}"
+            )
+        print(f"  lmstudio: model={self.model_id}", flush=True)
+
+    def predict(self, a: str, b: str) -> tuple[str, float]:
+        prompt = PREFIX_OPTIMIZED_PROMPT.format(head_a=a, head_b=b)
+        body = {
+            'model': self.model_id,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'temperature': 0.1,
+            'max_tokens': self.max_tokens,
+            'stream': False,
+            # Disable Gemma 4's thinking trace at the chat-template level —
+            # otherwise it consumes the entire token budget before emitting JSON
+            # and we get finish_reason=length with empty content.
+            'chat_template_kwargs': {'enable_thinking': False},
+        }
+        t0 = time.time()
+        resp = self._session.post(f"{self.base_url}/chat/completions", json=body)
+        elapsed = time.time() - t0
+        if resp.status_code != 200:
+            return 'EXCEPTION', elapsed
+        try:
+            content = resp.json()['choices'][0]['message']['content']
+        except (KeyError, IndexError, ValueError):
+            return 'PARSE_ERROR', elapsed
+        return parse_relation(content), elapsed
+
+    def teardown(self) -> None:
+        if self._session is not None:
+            try:
+                self._session.close()
+            except Exception:
+                pass
+        self._session = None
+
+
+def _lmstudio_gemma_e4b():
+    return LMStudioBackend(
+        name='lmstudio-gemma-e4b',
+        model_id='gemma-4-e4b-it',  # LM Studio normalizes IDs to lowercase
+    )
+
+
+def _lmstudio_gemma_e2b():
+    return LMStudioBackend(
+        name='lmstudio-gemma-e2b',
+        model_id='gemma-4-e2b-it',
+    )
+
+
+def _lmstudio_gemma_31b():
+    return LMStudioBackend(
+        name='lmstudio-gemma-31b',
+        model_id='gemma-4-31b-it',
+    )
+
+
 @dataclass
 class GeminiBackend:
     name: str = 'gemini-3-flash'
@@ -1622,6 +1736,10 @@ BACKENDS: dict[str, Callable[[], Backend]] = {
     'gemma-multi-pair':   GemmaMultiPairBackend,
     'gemma-multi-pair-5': _gemma_multi_pair_5,
     'gemma-multi-pair-20': _gemma_multi_pair_20,
+    'lmstudio':            LMStudioBackend,
+    'lmstudio-gemma-e4b':  _lmstudio_gemma_e4b,
+    'lmstudio-gemma-e2b':  _lmstudio_gemma_e2b,
+    'lmstudio-gemma-31b':  _lmstudio_gemma_31b,
     'gemini':         GeminiBackend,
 }
 
