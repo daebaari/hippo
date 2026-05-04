@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from hippo.capture.userprompt_hook import _resolve_project
+from hippo.cli.scope_args import add_scope_args, resolve_scopes
 from hippo.config import (
     RETRIEVAL_HOP_LIMIT_PER_SEED,
     RETRIEVAL_RERANK_TOP_K,
@@ -16,7 +16,7 @@ from hippo.config import (
 from hippo.daemon.client import DaemonClient
 from hippo.retrieval.inject import format_memory_block, load_body_preview
 from hippo.retrieval.pipeline import RetrievalPipeline
-from hippo.storage.multi_store import Scope, resolve_memory_dir
+from hippo.storage.multi_store import resolve_memory_dir
 
 DEFAULTS = dict(
     vector_top_k_per_scope=RETRIEVAL_VECTOR_TOP_K_PER_SCOPE,
@@ -29,25 +29,22 @@ DEFAULTS = dict(
 def memory_search_cli(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="memory-search")
     p.add_argument("query")
-    p.add_argument("--project", action="append", default=[])
-    p.add_argument("--socket", default=str(Path.home() / ".claude" / "memory-daemon.sock"))
+    p.add_argument(
+        "--socket", default=str(Path.home() / ".claude" / "memory-daemon.sock")
+    )
+    add_scope_args(p, kind="cross_read")
     args = p.parse_args(argv)
 
+    scopes = resolve_scopes(args, kind="cross_read", cwd=os.getcwd())
     daemon = DaemonClient(socket_path=Path(args.socket))
-    scopes = [Scope.global_()]
-    if args.project:
-        scopes.extend(Scope.project(proj) for proj in args.project)
-    else:
-        cwd_project = _resolve_project(os.getcwd())
-        if cwd_project:
-            scopes.append(Scope.project(cwd_project))
     pipeline = RetrievalPipeline(daemon=daemon, scopes=scopes, **DEFAULTS)
     result = pipeline.run(args.query)
-    # body_resolver: figure out which scope's bodies/ dir to read from
     scope_to_dir = {scope.as_string(): resolve_memory_dir(scope) for scope in scopes}
     block = format_memory_block(
         result,
-        body_resolver=lambda hit: load_body_preview(scope_to_dir[hit.scope], hit.head.body_id),
+        body_resolver=lambda hit: load_body_preview(
+            scope_to_dir[hit.scope], hit.head.body_id
+        ),
     )
     if not block:
         print("(no memory candidates)")
