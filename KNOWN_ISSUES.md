@@ -13,7 +13,7 @@ runs (nightly 3am, or manual `bin/dream-heavy --force`).
 table. The original spec called for raw-turn retrieval at 0.6× weight; Plan 3
 shipped without that step.
 
-**Workaround:** run `bin/dream-heavy --force --project <name>` after a turn
+**Workaround:** run `bin/dream-heavy --force --scope <name>` after a turn
 you want immediately retrievable. Takes 5-15 minutes per run.
 
 **Fix:** ~50-100 line addition to `vector_search_all_scopes` and the pipeline

@@ -27,8 +27,8 @@ scripts/install.sh
 echo 'export PATH="$HOME/code/hippo/bin:$PATH"' >> ~/.zshrc
 
 # day-to-day:
-hippo stats                               # body / head / edge counts
-hippo stats --project kaleon              # per-project view
+hippo stats                               # body / head / edge counts (auto-detected from cwd)
+hippo stats --scope kaleon                # per-project view
 hippo dream --force                       # force a heavy dream now
 hippo status --scope kaleon               # peek at a running or last-completed dream
 hippo get <head_id>                       # fetch a memory's body markdown
@@ -110,7 +110,7 @@ original files to `<memory_dir>/.legacy/<timestamp>/`.
 ```bash
 bin/dream-bootstrap \
   --memory-dir ~/.claude/projects/<encoded-project-path>/memory \
-  --project <project-name>
+  --scope <project-name>
 ```
 
 Acquires the `.heavy-lock` on both global and project stores for the

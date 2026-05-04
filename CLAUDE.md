@@ -51,9 +51,11 @@ Real Claude Code hook envelopes differ from naive expectations:
   at `transcript_path`. Hippo's Stop hook walks the JSONL backwards to find
   the most recent `type=user` entry.
 
-`hippo.capture.userprompt_hook._resolve_project(cwd)` walks up from cwd to
+Project detection (see `src/hippo/scope_detect.py`) walks up from cwd to
 find a `.git` or `CLAUDE.md` and returns the basename as the project name.
-That basename becomes the scope for capture / retrieval.
+That basename becomes the scope for capture / retrieval. CLI commands
+auto-detect the same way, with `--scope <name>` as an explicit override
+and `--all-scopes` for ops/cron use.
 
 ## Known gaps (real, affect usability)
 

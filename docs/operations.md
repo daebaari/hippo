@@ -52,8 +52,10 @@ writes a warning to `~/.claude/debug/dream-heavy.err`. Install the SDK with
 The CLI prints body / head / edge counts and recent dream runs per scope:
 
 ```bash
-uv run memory-stats                     # global
-uv run memory-stats --project kaleon    # project
+hippo stats                             # global + auto-detected project (from cwd)
+hippo stats --scope global              # global only
+hippo stats --scope kaleon              # one specific project
+hippo stats --all-scopes                # everything (global + every project)
 ```
 
 For ad-hoc queries, open the SQLite file directly:
