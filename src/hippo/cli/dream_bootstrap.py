@@ -6,11 +6,13 @@ moves them to ``.legacy/<timestamp>/`` after consolidation phases complete.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 import time
 from pathlib import Path
 
+from hippo.cli.scope_args import add_scope_args, resolve_scopes
 from hippo.config import HEAVY_LOCK_FILENAME, ConfigError
 from hippo.daemon.client import DaemonClient
 from hippo.dream.bootstrap import atomize_legacy_files
@@ -29,9 +31,13 @@ def main() -> int:
         required=True,
         help="legacy memory dir, e.g. ~/.claude/projects/-Users-keon-kaleon-kaleon/memory",
     )
-    p.add_argument("--project", required=True, help="project name (e.g. kaleon)")
-    p.add_argument("--no-archive", action="store_true", help="don't move files to .legacy/")
-    p.add_argument("--strict", action="store_true", help="hard-fail on backend misconfiguration")
+    p.add_argument(
+        "--no-archive", action="store_true", help="don't move files to .legacy/"
+    )
+    p.add_argument(
+        "--strict", action="store_true", help="hard-fail on backend misconfiguration"
+    )
+    add_scope_args(p, kind="single_scope_write")
     args = p.parse_args()
 
     legacy_dir = Path(args.memory_dir).expanduser()
@@ -39,11 +45,22 @@ def main() -> int:
         print(f"ERROR: {legacy_dir} not found", file=sys.stderr)
         return 1
 
+    scopes = resolve_scopes(args, kind="single_scope_write", cwd=os.getcwd())
+    # single_scope_write returns exactly one scope; bootstrap requires it to be a
+    # project scope (global has no legacy markdown to atomize).
+    target_scope = scopes[0]
+    if target_scope.kind != "project" or target_scope.project_name is None:
+        sys.stderr.write(
+            "ERROR: dream-bootstrap requires a project scope, got 'global'\n"
+        )
+        return 1
+    project_name: str = target_scope.project_name
+
     daemon = DaemonClient(socket_path=Path.home() / ".claude" / "memory-daemon.sock")
 
     # Open both stores and acquire heavy-dream locks before any LLM/atomize work.
     g_scope = Scope.global_()
-    p_scope = Scope.project(args.project)
+    p_scope = target_scope
     g_store = open_store(g_scope)
     p_store = open_store(p_scope)
 
@@ -83,7 +100,7 @@ def main() -> int:
 
         # Atomize files
         n = atomize_legacy_files(
-            legacy_dir=legacy_dir, project=args.project, llm=llm, daemon=daemon
+            legacy_dir=legacy_dir, project=project_name, llm=llm, daemon=daemon
         )
         print(f"Atomized {n} bodies from {legacy_dir}")
 
