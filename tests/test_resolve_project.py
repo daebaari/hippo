@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hippo.capture.userprompt_hook import _resolve_project
+from hippo.scope_detect import resolve_project as _resolve_project
 
 
 def test_regular_git_repo(tmp_path: Path) -> None:
