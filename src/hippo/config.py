@@ -101,7 +101,7 @@ def secrets_path() -> Path:
     return _config_dir() / HIPPO_SECRETS_FILENAME
 
 
-_VALID_BACKENDS: frozenset[str] = frozenset({"qwen", "gemini"})
+_VALID_BACKENDS: frozenset[str] = frozenset({"local", "qwen", "gemini"})
 
 DEFAULT_GEMINI_MODEL_ID = "gemini-3-flash-preview"
 DEFAULT_GEMINI_THINKING_LEVEL = "high"
@@ -109,7 +109,7 @@ DEFAULT_GEMINI_THINKING_LEVEL = "high"
 
 @dataclass(frozen=True, kw_only=True)
 class Config:
-    backend: str = "qwen"
+    backend: str = "local"
     gemini_model_id: str = DEFAULT_GEMINI_MODEL_ID
     gemini_default_thinking_level: str = DEFAULT_GEMINI_THINKING_LEVEL
 
@@ -122,11 +122,13 @@ def load_config() -> Config:
         data = tomllib.loads(p.read_text())
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{p}: {exc}") from exc
-    backend = str(data.get("backend", "qwen"))
+    backend = str(data.get("backend", "local"))
     if backend not in _VALID_BACKENDS:
         raise ConfigError(
-            f"backend must be 'qwen' or 'gemini', got {backend!r} in {p}"
+            f"backend must be 'local' or 'gemini', got {backend!r} in {p}"
         )
+    if backend == "qwen":
+        backend = "local"
     gemini_data = data.get("gemini")
     gemini: dict[str, str] = gemini_data if isinstance(gemini_data, dict) else {}
     return Config(

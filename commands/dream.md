@@ -3,7 +3,7 @@ description: Manually trigger Hippo's heavy dream now (atomize, edges, contradic
 allowed-tools: ["Bash"]
 ---
 
-Run the heavy dream over global scope plus the current project scope (if you're in a git repo).
+Run the heavy dream over the current project scope (auto-detected from cwd; pass `--scope global` to dream the global scope, or `--all-scopes` for everything).
 
 ```bash
 ~/code/hippo/bin/dream-heavy --force
