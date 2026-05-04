@@ -1,4 +1,4 @@
-"""Tests for _resolve_project, including the git-worktree case."""
+"""Tests for resolve_project, including the git-worktree case."""
 from __future__ import annotations
 
 from pathlib import Path

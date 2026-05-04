@@ -53,6 +53,7 @@ def _read_worktree_pointer(git_file: Path) -> Path | None:
     pointer_path = Path(pointer)
     if not pointer_path.is_absolute():
         pointer_path = (git_file.parent / pointer_path).resolve()
+    # pointer_path is .../<main>/.git/worktrees/<name>
     parts = pointer_path.parts
     try:
         idx = len(parts) - 1 - list(reversed(parts)).index(".git")
