@@ -69,7 +69,7 @@ if [[ "$ans" =~ ^[Yy]$ ]]; then
   mem_dir="${mem_dir:-$HOME/.claude/projects/-Users-keon-kaleon-kaleon/memory}"
   read -r -p "Project name [kaleon]: " proj
   proj="${proj:-kaleon}"
-  "$REPO/bin/dream-bootstrap" --memory-dir "$mem_dir" --project "$proj"
+  "$REPO/bin/dream-bootstrap" --memory-dir "$mem_dir" --scope "$proj"
 fi
 echo
 

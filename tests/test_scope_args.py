@@ -88,6 +88,36 @@ def test_no_project_no_flag_errors_for_cross_read(tmp_path: Path) -> None:
     assert excinfo.value.code == 2
 
 
+def test_no_project_no_flag_errors_for_targeted(tmp_path: Path) -> None:
+    bare = tmp_path / "nothing"
+    bare.mkdir()
+    args = _parse([], kind="targeted")
+    with pytest.raises(SystemExit) as excinfo:
+        resolve_scopes(args, kind="targeted", cwd=str(bare))
+    assert excinfo.value.code == 2
+
+
+def test_all_scopes_skips_project_named_global(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    projects_root = tmp_path / "projects"
+    for name in ["alpha", "global", "beta"]:
+        memdir = projects_root / name / "memory"
+        memdir.mkdir(parents=True)
+        (memdir / "memory.db").touch()
+    monkeypatch.setattr("hippo.cli.scope_args.PROJECTS_ROOT", projects_root)
+
+    args = _parse(["--all-scopes"], kind="cross_read")
+    scopes = resolve_scopes(args, kind="cross_read", cwd=str(tmp_path))
+    # The literal 'global' subdir is reserved-name; only alpha and beta
+    # should appear as project scopes alongside the canonical Scope.global_().
+    assert scopes == [
+        Scope.global_(),
+        Scope.project("alpha"),
+        Scope.project("beta"),
+    ]
+
+
 def test_no_project_error_message_format(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

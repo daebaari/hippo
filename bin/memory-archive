@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resolve symlinks so --project points to the real repo, not the symlink dir.
+# Resolve symlinks so 'uv run --project' points to the real repo, not the symlink dir.
 SOURCE="${BASH_SOURCE[0]}"
 while [ -L "$SOURCE" ]; do
   DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"

@@ -29,7 +29,7 @@ def archive_head_cli(argv: list[str] | None = None) -> int:
             return 0
         finally:
             store.conn.close()
-    print(f"head_id {args.head_id} not found", file=sys.stderr)
+    print(f"head_id {args.head_id} not found in any scope", file=sys.stderr)
     return 1
 
 
