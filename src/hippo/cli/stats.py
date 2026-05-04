@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from typing import Any
 
+from hippo.cli.scope_args import add_scope_args, resolve_scopes
 from hippo.storage.dream_runs import get_recent_runs
 from hippo.storage.multi_store import Scope, open_store
 
@@ -55,17 +57,12 @@ def collect_stats(scopes: list[Scope]) -> dict[str, dict[str, Any]]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="memory-stats")
     parser.add_argument(
-        "--project",
-        action="append",
-        default=[],
-        help="Project name(s) to include alongside global. Can repeat.",
-    )
-    parser.add_argument(
         "--json", action="store_true", help="Emit JSON instead of human format"
     )
+    add_scope_args(parser, kind="cross_read")
     args = parser.parse_args(argv)
 
-    scopes: list[Scope] = [Scope.global_()] + [Scope.project(p) for p in args.project]
+    scopes = resolve_scopes(args, kind="cross_read", cwd=os.getcwd())
     result = collect_stats(scopes)
 
     if args.json:
