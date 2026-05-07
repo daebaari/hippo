@@ -55,8 +55,11 @@ def expand_via_graph(
             if store is None:
                 continue
             edges = get_neighbors_1hop(store.conn, seed.head_id)
-            # Sort by edge type's boost (descending) so high-value relations come first
-            edges.sort(key=lambda e: -EDGE_BOOST.get(e.relation, 1.0))
+            # Sort by edge boost first (typed relations beat 'related'), then by
+            # raw weight within the same relation. Without the weight tiebreaker,
+            # Python's stable sort preserves DB insertion order, so a low-weight
+            # edge inserted earlier could outrank a high-weight one inserted later.
+            edges.sort(key=lambda e: (-EDGE_BOOST.get(e.relation, 1.0), -e.weight))
             added_for_this_seed = 0
             for edge in edges:
                 if added_for_this_seed >= hop_limit_per_seed:
